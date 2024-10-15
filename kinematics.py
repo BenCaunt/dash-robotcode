@@ -24,11 +24,11 @@ class WheelSpeeds:
 
     def from_id(self, id: int) -> float:
         assert id % 2 == 1
-        if id == 1:
+        if id == 3:
             return self.front_left
         elif id == 7:
             return self.front_right
-        elif id == 3:
+        elif id == 1:
             return self.back_left
         elif id == 5:
             return self.back_right
@@ -45,11 +45,11 @@ class ModuleAngles:
 
     def from_id(self, id: int) -> float:
         assert id % 2 == 0
-        if id == 2:
+        if id == 4:
             return self.front_left_angle
         elif id == 8:
             return self.front_right_angle
-        elif id == 4:
+        elif id == 2:
             return self.back_left_angle
         elif id == 6:
             return self.back_right_angle

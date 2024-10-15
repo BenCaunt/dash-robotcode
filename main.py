@@ -84,7 +84,7 @@ async def main():
 
     measured_module_positions = {2: 0.0, 4: 0.0, 6: 0.0, 8: 0.0}
     module_scaling = {2: 1.0, 4: 1.0, 6: 1.0, 8: 1.0}
-    module_inversions = {2: False, 4: False, 6: False, 8: False}
+    module_inversions = {2: True, 4: False, 6: False, 8: False}
 
     try:
         loop_start = time.monotonic()
