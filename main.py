@@ -117,7 +117,7 @@ async def main():
                 reference_heading = -yaw
                 heading_gain = 0.0
             reference = Twist2dVelocity(reference_vx, reference_vy, reference_w + heading_error * heading_gain)
-            wheel_speeds, module_angles = robot_relative_velocity_to_twist(reference, dt, -(yaw +np.pi/2)) # here for 'yaw'
+            wheel_speeds, module_angles = robot_relative_velocity_to_twist(reference, dt, -(yaw)) # here for 'yaw'
             # print(f"Yaw angle (rad): {yaw} | Yaw angle (deg): {math.degrees(yaw)}")
             # print(module_angles.to_list_degrees())
             print(f"heading error {heading_error}")
