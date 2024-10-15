@@ -10,8 +10,8 @@ import time
 from tqdm import tqdm
 from multiprocessing import JoinableQueue
 
-AZIMUTH_RATIO = 12.0 / 83.0
-DRIVE_REDUCTION = 17.0 / 54.0
+AZIMUTH_RATIO = 12.0 / 75.0
+DRIVE_REDUCTION = (25.0/21.0) * (15.0/45.0)
 
 DRIVE_DIAMETER = 0.075  # 75 mm
 DRIVE_CIRCUMFERENCE = DRIVE_DIAMETER * math.pi
@@ -61,7 +61,7 @@ async def main():
     global reference_vx, reference_vy, reference_w, offset, is_initial_angle, reference_heading
 
     transport = moteus_pi3hat.Pi3HatRouter(
-        servo_bus_map={1: [1, 2, 3], 2: [4, 5, 6], 3: [7, 8]},
+        servo_bus_map={1: [1, 2, 4], 2: [5, 6], 3: [3, 7, 8]},
     )
 
     azimuth_ids = [2, 4, 6, 8]
