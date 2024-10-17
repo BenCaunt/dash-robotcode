@@ -27,6 +27,8 @@ offset = 0.0 # rad
 is_initial_angle = True
 reference_heading = 0.0
 gain = 0.1
+angular_velocity_constant = 0.0
+yaw_bias_integral = 0.0
 
 from kinematics import robot_relative_velocity_to_twist, twist_to_wheel_speeds, WheelSpeeds, ModuleAngles
 from geometry2d import Twist2dVelocity
@@ -182,10 +184,14 @@ async def main():
 
             if is_initial_angle:
                 offset = imu_result.euler_rad.yaw
+                yaw_bias_integral = 0.0
+                angular_velocity_constant = np.deg2rad(imu_result.rate_dps.z)
 
                 is_initial_angle = False
 
-            yaw = angle_wrap(imu_result.euler_rad.yaw - offset)
+            yaw_bias_integral += angular_velocity_constant * dt
+
+            yaw = angle_wrap(imu_result.euler_rad.yaw - (offset + yaw_bias_integral))
 
             measured_module_positions = {
                 result.id: result.values[moteus.Register.POSITION] for result in results if result.id in azimuth_ids
