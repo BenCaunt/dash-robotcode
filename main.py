@@ -191,7 +191,7 @@ async def main():
 
             yaw_bias_integral += angular_velocity_constant * dt
 
-            yaw = angle_wrap(imu_result.euler_rad.yaw - (offset + yaw_bias_integral))
+            yaw = angle_wrap(imu_result.euler_rad.yaw - (offset - yaw_bias_integral))
 
             measured_module_positions = {
                 result.id: result.values[moteus.Register.POSITION] for result in results if result.id in azimuth_ids
