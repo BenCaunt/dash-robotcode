@@ -30,7 +30,7 @@ gain = 0.1
 angular_velocity_constant = 0.0
 yaw_bias_integral = 0.0
 
-from kinematics import robot_relative_velocity_to_twist, twist_to_wheel_speeds, WheelSpeeds, ModuleAngles
+from kinematics import robot_relative_velocity_to_twist, twist_to_wheel_speeds, WheelSpeeds, ModuleAngles, wheel_speeds_to_twist
 from geometry2d import Twist2dVelocity
 
 
@@ -192,6 +192,9 @@ async def main():
             yaw_bias_integral += angular_velocity_constant * dt
 
             yaw = angle_wrap(imu_result.euler_rad.yaw - (offset - yaw_bias_integral))
+            
+            twist = wheel_speeds_to_twist(wheel_speeds, module_angles, dt)
+            print(twist.vx, twist.vy, twist.w)  
 
             measured_module_positions = {
                 result.id: result.values[moteus.Register.POSITION] for result in results if result.id in azimuth_ids

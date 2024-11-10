@@ -139,30 +139,62 @@ def twist_to_wheel_speeds(twist: Twist2dVelocity, dt: float) -> Tuple[WheelSpeed
     return WheelSpeeds(front_left=v1, front_right=v2, back_left=v3, back_right=v4), ModuleAngles(
         front_left_angle=theta1, front_right_angle=theta2, back_left_angle=theta3, back_right_angle=theta4
     )
+    
+def wheel_speeds_to_twist(speeds: WheelSpeeds, angles: ModuleAngles, dt: float) -> Twist2dVelocity:
+    # Calculate the velocity components for each wheel
+    v1_x = speeds.front_left * math.cos(angles.front_left_angle)
+    v1_y = speeds.front_left * math.sin(angles.front_left_angle)
+    v2_x = speeds.front_right * math.cos(angles.front_right_angle)
+    v2_y = speeds.front_right * math.sin(angles.front_right_angle)
+    v3_x = speeds.back_left * math.cos(angles.back_left_angle)
+    v3_y = speeds.back_left * math.sin(angles.back_left_angle)
+    v4_x = speeds.back_right * math.cos(angles.back_right_angle)
+    v4_y = speeds.back_right * math.sin(angles.back_right_angle)
+
+    # Create the inverse transition matrix
+    inverse_transition = np.linalg.pinv(
+        [
+            [1, 0, -fl_pos.y],
+            [0, 1, fl_pos.x],
+            [1, 0, -fr_pos.y],
+            [0, 1, fr_pos.x],
+            [1, 0, -bl_pos.y],
+            [0, 1, bl_pos.x],
+            [1, 0, -br_pos.y],
+            [0, 1, br_pos.x],
+        ]
+    )
+
+    # Combine the velocities into a single vector
+    wheel_velocities = np.array([v1_x, v1_y, v2_x, v2_y, v3_x, v3_y, v4_x, v4_y])
+
+    # Calculate the twist
+    twist = np.dot(inverse_transition, wheel_velocities)
+
+    return Twist2dVelocity(twist[0] / dt, twist[1] / dt, twist[2] / dt)
 
 
 if __name__ == "__main__":
-    twist = Twist2dVelocity(1.0, 0.0, 0.0)
-    speeds, angles = twist_to_wheel_speeds(twist, 0.05)
+    # twist = Twist2dVelocity(1.0, 0.0, 0.0)
+    # speeds, angles = twist_to_wheel_speeds(twist, 0.05)
 
-    print(angles.to_list_degrees())
-    print(speeds.front_left)
-    print(speeds.front_right)
-    print(speeds.back_left)
-    print(speeds.back_right)
-    dt = 1.0
-    yaw = np.deg2rad(90.0)
-    tf = Transform2d(twist.vx * dt, twist.vy * dt, twist.w * dt)
-    tf = Transform2d(0, 0, yaw) * tf
-    print(tf.x, tf.y, tf.theta)
+    # print(angles.to_list_degrees())
+    # print(speeds.front_left)
+    # print(speeds.front_right)
+    # print(speeds.back_left)
+    # print(speeds.back_right)
+    # dt = 1.0
+    # yaw = np.deg2rad(90.0)
+    # tf = Transform2d(twist.vx * dt, twist.vy * dt, twist.w * dt)
+    # tf = Transform2d(0, 0, yaw) * tf
+    # print(tf.x, tf.y, tf.theta)
+    wheel_speeds = WheelSpeeds(front_left=1.0, front_right=1.0, back_left=1.0, back_right=1.0)
+    angles = ModuleAngles(front_left_angle=np.deg2rad(45), front_right_angle=np.deg2rad(45), back_left_angle=np.deg2rad(45), back_right_angle=np.deg2rad(45))
+    twist = wheel_speeds_to_twist(wheel_speeds, angles, 1.0)
+    print(twist.vx, twist.vy, twist.w)
 
 
 def epsilon_equals(a: float, b: float, epsilon: float) -> bool:
     return abs(a - b) < epsilon
 
 
-if __name__ == "__main__":
-    # test acceleration limit 
-    twist = Twist2dVelocity(2.0, 0.0, 0.0)
-    twist = apply_acceleration_limit(twist, 0.10)
-    print(twist.vx, twist.vy, twist.w)
