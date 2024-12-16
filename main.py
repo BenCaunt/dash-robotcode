@@ -130,7 +130,7 @@ async def main():
             reference = Twist2dVelocity(reference_vx, reference_vy, reference_w + heading_error * heading_gain)
 
             # note: The yaw angle offset usage remains as in original code
-            wheel_speeds, module_angles = robot_relative_velocity_to_twist(reference, dt, -(yaw + np.pi/2))
+            wheel_speeds, module_angles = robot_relative_velocity_to_twist(reference, dt, -(yaw))
             print(f"heading error {heading_error}")
             commands = []
             for id in azimuth_ids:
