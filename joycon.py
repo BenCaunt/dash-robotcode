@@ -56,7 +56,7 @@ def main():
     running = True
     while running:
         # Pump and process events
-        pygame.event.pump()
+        pygame.event    .pump()
 
         # Check if circle button is pressed
         # Note: For continuous checking, you can read button states directly.
@@ -71,9 +71,9 @@ def main():
         rx = apply_deadband(normalize_axis(joy.get_axis(RIGHT_X_AXIS)))
 
         # Convert axes to velocity commands
-        vx = -ly * max_speed   # forward on stick usually negative Y
-        vy = lx * max_speed
-        omega = rx * max_omega_deg
+        vx = lx * max_speed   # forward on stick usually negative Y
+        vy = ly * max_speed
+        omega = -rx * max_omega_deg
 
         # Publish updated velocity
 
