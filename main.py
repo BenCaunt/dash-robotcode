@@ -161,15 +161,10 @@ async def main():
                 )
 
             for id in drive_ids:
-                if id == 1:
-                    sign = 1.0
-                else: 
-                    sign = 0.0
                 commands.append(
                     servos[id].make_position(
                         position=math.nan,
                         velocity=module_scaling[id + 1]
-                        * sign
                         * wheel_speed_to_motor_speed(wheel_speeds.from_id(id))
                         * drive_directions[id],
                         maximum_torque=1.0 * 0.25,
