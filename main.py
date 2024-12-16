@@ -127,7 +127,7 @@ async def main():
             if np.abs(reference_w) > 0.1:
                 reference_heading = -yaw
                 heading_gain = 0.0
-            reference = Twist2dVelocity(-reference_vx, -reference_vy, -reference_w + heading_error * heading_gain)
+            reference = Twist2dVelocity(reference_vx, reference_vy, reference_w + heading_error * heading_gain)
 
             # note: The yaw angle offset usage remains as in original code
             wheel_speeds, module_angles = robot_relative_velocity_to_twist(reference, dt, -(yaw + np.pi/2))
