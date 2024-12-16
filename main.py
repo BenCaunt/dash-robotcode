@@ -117,7 +117,7 @@ async def main():
 
             if loop_start - last_recv > WATCHDOG_TIMEOUT:
                 # If we haven't received a velocity command recently, stop
-                reference_vx = 0.001
+                reference_vx = 0.0
                 reference_vy = 0.0
                 reference_w = 0.0
 
@@ -127,7 +127,7 @@ async def main():
             if np.abs(reference_w) > 0.1:
                 reference_heading = -yaw
                 heading_gain = 0.0
-            reference = Twist2dVelocity(reference_vx, reference_vy, reference_w + heading_error * heading_gain)
+            reference = Twist2dVelocity(-reference_vx, -reference_vy, -reference_w + heading_error * heading_gain)
 
             # note: The yaw angle offset usage remains as in original code
             wheel_speeds, module_angles = robot_relative_velocity_to_twist(reference, dt, -(yaw + np.pi/2))
@@ -175,6 +175,7 @@ async def main():
                 )
 
             results = await transport.cycle(commands, request_attitude=True)
+
 
             imu_result = [x for x in results if x.id == -1 and isinstance(x, moteus_pi3hat.CanAttitudeWrapper)][0]
 
