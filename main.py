@@ -94,7 +94,7 @@ async def main():
     drive_ids = [1, 3, 5, 7]
 
     servos = {servo_id: moteus.Controller(id=servo_id, transport=transport) for servo_id in azimuth_ids + drive_ids}
-    drive_directions = {1: 1, 3: 1, 5: -1, 7: -1}
+    drive_directions = {1: -1, 3: 1, 5: 1, 7: -1}
 
     results = await transport.cycle([x.make_stop(query=True) for x in servos.values()])
     initial_module_positions = {
