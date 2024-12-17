@@ -94,7 +94,7 @@ async def main():
     drive_ids = [1, 3, 5, 7]
 
     servos = {servo_id: moteus.Controller(id=servo_id, transport=transport) for servo_id in azimuth_ids + drive_ids}
-    drive_directions = {1: 1, 3: -1, 5: 1, 7: -1}
+    drive_directions = {1: -1, 3: 1, 5: 1, 7: -1}
 
     results = await transport.cycle([x.make_stop(query=True) for x in servos.values()])
     initial_module_positions = {
@@ -132,7 +132,7 @@ async def main():
             # note: The yaw angle offset usage remains as in original code
             wheel_speeds, module_angles = robot_relative_velocity_to_twist(reference, dt, -(yaw + np.pi/2))
             print(f"heading error {heading_error}")
-            commands = [] 
+            commands = []
             for id in azimuth_ids:
                 current_angle = calculate_swerve_angle(measured_module_positions[id]) - calculate_swerve_angle(
                     initial_module_positions[id]
@@ -161,6 +161,8 @@ async def main():
                 )
 
             for id in drive_ids:
+                if id == 1 or id == 3 or id == 5:
+                    continue
                 commands.append(
                     servos[id].make_position(
                         position=math.nan,
