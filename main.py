@@ -161,8 +161,6 @@ async def main():
                 )
 
             for id in drive_ids:
-                if id == 5 or id == 1 or id == 7:
-                    continue
                 commands.append(
                     servos[id].make_position(
                         position=math.nan,
