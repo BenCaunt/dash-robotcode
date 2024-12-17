@@ -26,11 +26,11 @@ class WheelSpeeds:
         assert id % 2 == 1
         if id == 3:
             return self.front_left
-        elif id == 7:
+        elif id == 5:
             return self.front_right
         elif id == 1:
             return self.back_left
-        elif id == 5:
+        elif id == 7:
             return self.back_right
         else:
             raise ValueError(f"Invalid id: {id}")
