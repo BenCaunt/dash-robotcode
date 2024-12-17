@@ -24,9 +24,9 @@ class WheelSpeeds:
 
     def from_id(self, id: int) -> float:
         assert id % 2 == 1
-        if id == 3:
+        if id == 1:
             return self.front_left
-        elif id == 1:
+        elif id == 3:
             return self.front_right
         elif id == 5:
             return self.back_left
