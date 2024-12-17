@@ -26,9 +26,9 @@ class WheelSpeeds:
         assert id % 2 == 1
         if id == 3:
             return self.front_left
-        elif id == 1:
-            return self.front_right
         elif id == 5:
+            return self.front_right
+        elif id == 1:
             return self.back_left
         elif id == 7:
             return self.back_right
