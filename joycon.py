@@ -71,8 +71,8 @@ def main():
         rx = apply_deadband(normalize_axis(joy.get_axis(RIGHT_X_AXIS)))
 
         # Convert axes to velocity commands
-        vx = lx * max_speed   # forward on stick usually negative Y
-        vy = -ly * max_speed
+        vx = -ly * max_speed    # forward on stick usually negative Y
+        vy = lx * max_speed
         omega = -rx * max_omega_deg
 
         # Publish updated velocity
