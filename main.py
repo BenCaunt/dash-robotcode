@@ -256,6 +256,7 @@ async def main():
             twist = Twist2d.from_twist2dvelocity(actual_twist, dt)
             # the most beautiful operation in all of robotics.
             pose = pose * twist.exp()
+            pose.theta = yaw # set to best estimate of yaw.
 
             print("Pose:", pose.x, pose.y, pose.yaw)
 
