@@ -193,7 +193,7 @@ async def main():
                 result.id: result.values[moteus.Register.POSITION] for result in results if result.id in azimuth_ids
             }
 
-            module_angles = measured_positions_to_module_angles(measured_module_positions)
+            module_angles = measured_positions_to_module_angles(measured_module_positions, initial_module_positions)
             print(module_angles)
 
             await asyncio.sleep(0.005)

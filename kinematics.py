@@ -197,15 +197,22 @@ if __name__ == "__main__":
 def epsilon_equals(a: float, b: float, epsilon: float) -> bool:
     return abs(a - b) < epsilon
 
-def measured_positions_to_module_angles(measured_positions: dict[int, float]) -> ModuleAngles:
+def measured_positions_to_module_angles(
+    measured_positions: dict[int, float],
+    initial_positions: dict[int, float] = None,
+    offset_deg: float = 0.0
+) -> ModuleAngles:
     """
-    Convert raw measured positions (in rotations) into a ModuleAngles object (in radians).
-    This uses the motor ID mapping from kinematics.py:
+    Convert raw measured positions (in rotations) into a ModuleAngles object (in radians),
+    optionally subtracting initial 'zero' positions and applying an extra offset in degrees.
+    
+    Motor ID mapping from kinematics.py:
       - ID 4 -> front_left
       - ID 8 -> front_right
       - ID 2 -> back_left
       - ID 6 -> back_right
     """
+
     def wrap(angle: float) -> float:
         while angle > math.pi:
             angle -= 2 * math.pi
@@ -214,15 +221,26 @@ def measured_positions_to_module_angles(measured_positions: dict[int, float]) ->
         return angle
 
     def rotation_to_angle(rotation: float) -> float:
-        # Use the same ratio as main.py:
+        # Same ratio as main.py
         AZIMUTH_RATIO = 12.0 / 75.0
         return wrap(rotation * 2 * math.pi * AZIMUTH_RATIO)
 
+    def get_angle(motor_id: int) -> float:
+        # Subtract initial offset if provided
+        adjusted_rotation = measured_positions[motor_id]
+        if initial_positions is not None:
+            adjusted_rotation -= initial_positions[motor_id]
+        # Convert rotation to angle
+        angle = rotation_to_angle(adjusted_rotation)
+        # Apply the user-specified offset in degrees
+        angle -= math.radians(offset_deg)
+        return wrap(angle)
+
     return ModuleAngles(
-        front_left_angle=rotation_to_angle(measured_positions[4]),
-        front_right_angle=rotation_to_angle(measured_positions[8]),
-        back_left_angle=rotation_to_angle(measured_positions[2]),
-        back_right_angle=rotation_to_angle(measured_positions[6]),
+        front_left_angle=get_angle(4),
+        front_right_angle=get_angle(8),
+        back_left_angle=get_angle(2),
+        back_right_angle=get_angle(6),
     )
 
 
