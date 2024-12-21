@@ -212,6 +212,8 @@ def measured_positions_to_module_angles(
       - ID 2 -> back_left
       - ID 6 -> back_right
     """
+    # we initialize the angles to 90 when the robot is turned on.  
+    STARTING_OFFSET = np.pi / 2.0
 
     def wrap(angle: float) -> float:
         while angle > math.pi:
@@ -234,6 +236,9 @@ def measured_positions_to_module_angles(
         angle = rotation_to_angle(adjusted_rotation)
         # Apply the user-specified offset in degrees
         angle -= math.radians(offset_deg)
+
+        # Add the starting offset
+        angle += STARTING_OFFSET
         return wrap(angle)
 
     return ModuleAngles(
