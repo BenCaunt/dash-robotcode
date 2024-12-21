@@ -191,10 +191,14 @@ async def main():
                 result.id: result.values[moteus.Register.POSITION] for result in results if result.id in azimuth_ids
             }
 
+            measured_wheel_speeds = {
+                result.id: result.values[moteus.Register.VELOCITY] for result in results if result.id in drive_ids      
+            }
+
             module_angles = measured_positions_to_module_angles(measured_module_positions, initial_module_positions)
             twist = wheel_speeds_to_twist(wheel_speeds, module_angles, dt)
 
-            print(wheel_speeds)
+            print(measured_wheel_speeds)
             print(twist.vx, twist.vy, twist.w)
 
             await asyncio.sleep(0.005)
