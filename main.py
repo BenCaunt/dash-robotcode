@@ -38,6 +38,8 @@ VELOCITY_KEY = "robot/control/velocity"
 ZERO_HEADING_KEY = "robot/control/zero_heading"
 MEASURED_TWIST_KEY = "robot/observed/twist"
 ODOMETRY_KEY = "robot/odom"
+WHEEL_VELOCITIES_KEY = "robot/observed/wheel_velocities"
+MODULE_ANGLES_KEY = "robot/observed/module_angles"
 
 
 
@@ -97,11 +99,10 @@ async def main():
     _ = session.declare_subscriber(VELOCITY_KEY, zenoh_velocity_listener)
     _ = session.declare_subscriber(ZERO_HEADING_KEY, zenoh_zero_heading_listener)
 
-    # Declare publisher for measured twist
     measured_twist_pub = session.declare_publisher(MEASURED_TWIST_KEY)
-
-    # NEW: Publisher for odometry
     odom_pub = session.declare_publisher(ODOMETRY_KEY)
+    wheel_velocities_pub = session.declare_publisher(WHEEL_VELOCITIES_KEY)
+    module_angles_pub = session.declare_publisher(MODULE_ANGLES_KEY)
 
     transport = moteus_pi3hat.Pi3HatRouter(
         servo_bus_map={1: [1, 2, 4], 2: [5, 6], 3: [3, 7, 8]},
@@ -269,6 +270,23 @@ async def main():
                 "theta": pose.theta
             })
             odom_pub.put(odom_msg)
+
+            wheel_velocities_msg = json.dumps({
+                "front_left": actual_wheel_speeds_dict[1],
+                "front_right": actual_wheel_speeds_dict[3],
+                "back_left": actual_wheel_speeds_dict[5],
+                "back_right": actual_wheel_speeds_dict[7]
+            })
+            wheel_velocities_pub.put(wheel_velocities_msg)
+
+            module_angles_msg = json.dumps({
+                "front_left": module_angles.front_left,
+                "front_right": module_angles.front_right,
+                "back_left": module_angles.back_left,
+                "back_right": module_angles.back_right
+            })
+            module_angles_pub.put(module_angles_msg)
+
 
             await asyncio.sleep(0.005)
 
