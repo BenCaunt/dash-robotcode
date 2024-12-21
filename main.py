@@ -280,10 +280,10 @@ async def main():
             wheel_velocities_pub.put(wheel_velocities_msg)
 
             module_angles_msg = json.dumps({
-                "front_left": module_angles.front_left,
-                "front_right": module_angles.front_right,
-                "back_left": module_angles.back_left,
-                "back_right": module_angles.back_right
+                "front_left": module_angles.front_left_angle,
+                "front_right": module_angles.front_right_angle,
+                "back_left": module_angles.back_left_angle,
+                "back_right": module_angles.back_right_angle
             })
             module_angles_pub.put(module_angles_msg)
 
