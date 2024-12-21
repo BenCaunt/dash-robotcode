@@ -10,7 +10,7 @@ import numpy as np
 import moteus
 import moteus_pi3hat
 
-from kinematics import robot_relative_velocity_to_twist, twist_to_wheel_speeds, WheelSpeeds, ModuleAngles, wheel_speeds_to_twist
+from kinematics import measured_positions_to_module_angles, robot_relative_velocity_to_twist, twist_to_wheel_speeds, WheelSpeeds, ModuleAngles, wheel_speeds_to_twist
 from geometry2d import Twist2dVelocity
 
 import zenoh
@@ -192,7 +192,9 @@ async def main():
             measured_module_positions = {
                 result.id: result.values[moteus.Register.POSITION] for result in results if result.id in azimuth_ids
             }
-            print(measured_module_positions)
+
+            module_angles = measured_positions_to_module_angles(measured_module_positions)
+            print(module_angles)
 
             await asyncio.sleep(0.005)
 

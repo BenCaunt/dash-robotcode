@@ -197,4 +197,32 @@ if __name__ == "__main__":
 def epsilon_equals(a: float, b: float, epsilon: float) -> bool:
     return abs(a - b) < epsilon
 
+def measured_positions_to_module_angles(measured_positions: dict[int, float]) -> ModuleAngles:
+    """
+    Convert raw measured positions (in rotations) into a ModuleAngles object (in radians).
+    This uses the motor ID mapping from kinematics.py:
+      - ID 4 -> front_left
+      - ID 8 -> front_right
+      - ID 2 -> back_left
+      - ID 6 -> back_right
+    """
+    def wrap(angle: float) -> float:
+        while angle > math.pi:
+            angle -= 2 * math.pi
+        while angle < -math.pi:
+            angle += 2 * math.pi
+        return angle
+
+    def rotation_to_angle(rotation: float) -> float:
+        # Use the same ratio as main.py:
+        AZIMUTH_RATIO = 12.0 / 75.0
+        return wrap(rotation * 2 * math.pi * AZIMUTH_RATIO)
+
+    return ModuleAngles(
+        front_left_angle=rotation_to_angle(measured_positions[4]),
+        front_right_angle=rotation_to_angle(measured_positions[8]),
+        back_left_angle=rotation_to_angle(measured_positions[2]),
+        back_right_angle=rotation_to_angle(measured_positions[6]),
+    )
+
 
