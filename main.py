@@ -245,7 +245,7 @@ async def main():
             # subtract (or add) any offset as needed:
             # Ex: actual_wz = np.deg2rad(imu_result.rate_dps.z) - drift_term
             actual_wz = np.deg2rad(imu_result.rate_dps.z)  # or adjust if needed
-            actual_twist = Twist2dVelocity(raw_twist.vx, raw_twist.vy, actual_wz)
+            actual_twist = Twist2dVelocity(raw_twist.vx, -raw_twist.vy, actual_wz)
 
             print("Actual Twist (gyro-based ω):", actual_twist.vx, actual_twist.vy, actual_twist.w)
 
@@ -260,7 +260,7 @@ async def main():
             twist = Twist2d.from_twist2dvelocity(actual_twist, dt)
             # the most beautiful operation in all of robotics.
             pose = pose * twist.exp()
-            pose.theta = yaw # set to best estimate of yaw.
+            pose.theta = -yaw # set to best estimate of yaw.
 
             # Publish odometry instead
             odom_msg = json.dumps({
