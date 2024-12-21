@@ -6,6 +6,7 @@ import pygame
 VELOCITY_KEY = "robot/control/velocity"
 ZERO_HEADING_KEY = "robot/control/zero_heading"
 MEASURED_TWIST_KEY = "robot/observed/twist"
+ODOMETRY_KEY = "robot/odom"
 
 # Adjust these indices as needed for your specific controller
 LEFT_X_AXIS = 0
@@ -47,6 +48,9 @@ def main():
 
     # Subscribe to measured twist
     _ = session.declare_subscriber(MEASURED_TWIST_KEY, measured_twist_listener)
+
+    # NEW: Subscribe to odometry
+    _ = session.declare_subscriber(ODOMETRY_KEY, odom_listener)
 
     # Control scaling:
     max_speed = 0.5      # m/s
@@ -90,6 +94,14 @@ def main():
 
     session.close()
     pygame.quit()
+
+def odom_listener(sample):
+    data_str = sample.payload.to_string()
+    try:
+        data = json.loads(data_str)
+        print(f"ODOM => x={data['x']:.3f}, y={data['y']:.3f}, theta={data['theta']:.3f}")
+    except Exception as e:
+        print(f"Failed to parse odom: {e}")
 
 def measured_twist_listener(sample):
     data_str = sample.payload.to_string()

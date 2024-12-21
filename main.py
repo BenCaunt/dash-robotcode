@@ -37,6 +37,7 @@ yaw_bias_integral = 0.0
 VELOCITY_KEY = "robot/control/velocity"
 ZERO_HEADING_KEY = "robot/control/zero_heading"
 MEASURED_TWIST_KEY = "robot/observed/twist"
+ODOMETRY_KEY = "robot/odom"
 
 
 
@@ -98,6 +99,9 @@ async def main():
 
     # Declare publisher for measured twist
     measured_twist_pub = session.declare_publisher(MEASURED_TWIST_KEY)
+
+    # NEW: Publisher for odometry
+    odom_pub = session.declare_publisher(ODOMETRY_KEY)
 
     transport = moteus_pi3hat.Pi3HatRouter(
         servo_bus_map={1: [1, 2, 4], 2: [5, 6], 3: [3, 7, 8]},
@@ -258,7 +262,13 @@ async def main():
             pose = pose * twist.exp()
             pose.theta = yaw # set to best estimate of yaw.
 
-            print("Pose:", pose.x, pose.y, pose.theta)
+            # Publish odometry instead
+            odom_msg = json.dumps({
+                "x": pose.x,
+                "y": pose.y,
+                "theta": pose.theta
+            })
+            odom_pub.put(odom_msg)
 
             await asyncio.sleep(0.005)
 
