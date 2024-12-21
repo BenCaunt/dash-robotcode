@@ -56,7 +56,7 @@ def main():
     running = True
     while running:
         # Pump and process events
-        pygame.event    .pump()
+        pygame.event.pump()
 
         # Check if circle button is pressed
         # Note: For continuous checking, you can read button states directly.

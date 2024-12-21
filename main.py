@@ -194,7 +194,7 @@ async def main():
             module_angles = measured_positions_to_module_angles(measured_module_positions, initial_module_positions)
             twist = wheel_speeds_to_twist(wheel_speeds, module_angles, dt)
 
-            print(module_angles)
+            print(wheel_speeds)
             print(twist.vx, twist.vy, twist.w)
 
             await asyncio.sleep(0.005)
