@@ -69,6 +69,10 @@ class Twist2d:
     @classmethod
     def from_velocity(cls, vx: float, vy: float, w: float, dt: float) -> "Twist2d":
         return cls(vx * dt, vy * dt, w * dt)
+    
+    @classmethod
+    def from_twist2dvelocity(cls, twist2dvelocity: "Twist2dVelocity", dt: float) -> "Twist2d":
+        return cls(twist2dvelocity.vx * dt, twist2dvelocity.vy * dt, twist2dvelocity.w * dt)
 
     def exp(self) -> Transform2d:
         angle = self.dyaw

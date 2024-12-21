@@ -11,7 +11,7 @@ import moteus
 import moteus_pi3hat
 
 from kinematics import measured_positions_to_module_angles, robot_relative_velocity_to_twist, twist_to_wheel_speeds, WheelSpeeds, ModuleAngles, wheel_speeds_to_twist
-from geometry2d import Twist2dVelocity
+from geometry2d import Transform2d, Twist2d, Twist2dVelocity
 
 import zenoh
 
@@ -37,6 +37,8 @@ yaw_bias_integral = 0.0
 VELOCITY_KEY = "robot/control/velocity"
 ZERO_HEADING_KEY = "robot/control/zero_heading"
 MEASURED_TWIST_KEY = "robot/observed/twist"
+
+
 
 def angle_wrap(angle):
     while angle > math.pi:
@@ -87,13 +89,14 @@ def motor_speed_to_wheel_speed(motor_speed: float, drive_direction: float) -> fl
 async def main():
     global reference_vx, reference_vy, reference_w, offset, is_initial_angle, reference_heading
     global yaw_bias_integral, angular_velocity_constant
-
+    pose = Transform2d(0.0, 0.0, 0.0)
     # Start Zenoh session and subscribe
     z_conf = zenoh.Config()
     session = zenoh.open(z_conf)
     _ = session.declare_subscriber(VELOCITY_KEY, zenoh_velocity_listener)
     _ = session.declare_subscriber(ZERO_HEADING_KEY, zenoh_zero_heading_listener)
 
+    # Declare publisher for measured twist
     measured_twist_pub = session.declare_publisher(MEASURED_TWIST_KEY)
 
     transport = moteus_pi3hat.Pi3HatRouter(
@@ -249,6 +252,12 @@ async def main():
                 "omega": actual_twist.w
             })
             measured_twist_pub.put(measured_twist_msg)
+
+            twist = Twist2d.from_twist2dvelocity(actual_twist, dt)
+            # the most beautiful operation in all of robotics.
+            pose = pose * twist.exp()
+
+            print("Pose:", pose.x, pose.y, pose.yaw)
 
             await asyncio.sleep(0.005)
 
