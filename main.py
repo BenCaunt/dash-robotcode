@@ -258,7 +258,7 @@ async def main():
             pose = pose * twist.exp()
             pose.theta = yaw # set to best estimate of yaw.
 
-            print("Pose:", pose.x, pose.y, pose.yaw)
+            print("Pose:", pose.x, pose.y, pose.theta)
 
             await asyncio.sleep(0.005)
 
