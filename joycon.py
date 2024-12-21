@@ -72,7 +72,7 @@ def main():
 
         # Convert axes to velocity commands
         vx = -ly * max_speed    # forward on stick usually negative Y
-        vy = lx * max_speed
+        vy = -lx * max_speed
         omega = -rx * max_omega_deg
 
         # Publish updated velocity

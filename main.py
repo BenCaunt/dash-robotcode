@@ -192,6 +192,7 @@ async def main():
             measured_module_positions = {
                 result.id: result.values[moteus.Register.POSITION] for result in results if result.id in azimuth_ids
             }
+            print(measured_module_positions)
 
             await asyncio.sleep(0.005)
 
