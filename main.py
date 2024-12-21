@@ -76,6 +76,13 @@ def zenoh_zero_heading_listener(sample):
     global is_initial_angle
     is_initial_angle = True
 
+def motor_speed_to_wheel_speed(motor_speed: float, drive_direction: float) -> float:
+    """
+    Convert motor speed (rev/s) to wheel speed (m/s).
+    drive_direction is 1 or -1 based on the drive_directions map.
+    """
+    return motor_speed * DRIVE_CIRCUMFERENCE * DRIVE_REDUCTION * drive_direction
+
 async def main():
     global reference_vx, reference_vy, reference_w, offset, is_initial_angle, reference_heading
     global yaw_bias_integral, angular_velocity_constant
@@ -198,8 +205,28 @@ async def main():
             module_angles = measured_positions_to_module_angles(measured_module_positions, initial_module_positions)
             twist = wheel_speeds_to_twist(wheel_speeds, module_angles, dt)
 
-            print(measured_wheel_speeds)
-            print(twist.vx, twist.vy, twist.w)
+            # Convert each motor's rev/s to wheel speed in m/s, applying drive_directions:
+            actual_wheel_speeds_dict = {
+                drive_id: motor_speed_to_wheel_speed(
+                    measured_wheel_speeds[drive_id],
+                    drive_directions[drive_id]
+                )
+                for drive_id in drive_ids
+            }
+
+            # Construct a WheelSpeeds object with actual measured wheel speeds:
+            measured_wheel_speeds_struct = WheelSpeeds(
+                front_left=actual_wheel_speeds_dict[1],
+                front_right=actual_wheel_speeds_dict[3],
+                back_left=actual_wheel_speeds_dict[5],
+                back_right=actual_wheel_speeds_dict[7],
+            )
+
+            # The module angles you derived above (module_angles) already reflect measured azimuth
+            # so combine them with these actual speeds for the real robot velocity:
+            actual_twist = wheel_speeds_to_twist(measured_wheel_speeds_struct, module_angles, dt)
+
+            print("Actual Twist:", actual_twist.vx, actual_twist.vy, actual_twist.w)
 
             await asyncio.sleep(0.005)
 
