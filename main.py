@@ -114,6 +114,9 @@ async def main():
     module_scaling = {2: 1.0, 4: 1.0, 6: 1.0, 8: 1.0}
     module_inversions = {2: False, 4: False, 6: False, 8: False}
 
+    # Before entering the main loop, define a dict to store previous motor velocities:
+    previous_motor_velocities = {1: 0.0, 3: 0.0, 5: 0.0, 7: 0.0}
+
     try:
         loop_start = time.monotonic()
         dt = 0.005
@@ -205,16 +208,23 @@ async def main():
             module_angles = measured_positions_to_module_angles(measured_module_positions, initial_module_positions)
             twist = wheel_speeds_to_twist(wheel_speeds, module_angles, dt)
 
-            # Convert each motor's rev/s to wheel speed in m/s, applying drive_directions:
-            actual_wheel_speeds_dict = {
-                drive_id: motor_speed_to_wheel_speed(
-                    measured_wheel_speeds[drive_id],
+            # Build dictionary of measured wheel speeds from servo results.
+            actual_wheel_speeds_dict = {}
+            for drive_id in drive_ids:
+                if drive_id not in measured_wheel_speeds:
+                    print(f"NOT FOUND; SKIPPING servo: {drive_id}")
+                    motor_speed = previous_motor_velocities[drive_id]
+                else:
+                    motor_speed = measured_wheel_speeds[drive_id]
+                    # Update our fallback
+                    previous_motor_velocities[drive_id] = motor_speed
+
+                actual_wheel_speeds_dict[drive_id] = motor_speed_to_wheel_speed(
+                    motor_speed, 
                     drive_directions[drive_id]
                 )
-                for drive_id in drive_ids
-            }
 
-            # Construct a WheelSpeeds object with actual measured wheel speeds:
+            # Construct a WheelSpeeds object with actual measured wheel speeds
             measured_wheel_speeds_struct = WheelSpeeds(
                 front_left=actual_wheel_speeds_dict[1],
                 front_right=actual_wheel_speeds_dict[3],
@@ -222,10 +232,8 @@ async def main():
                 back_right=actual_wheel_speeds_dict[7],
             )
 
-            # The module angles you derived above (module_angles) already reflect measured azimuth
-            # so combine them with these actual speeds for the real robot velocity:
+            # Use measured azimuth angles + measured wheel speeds to get actual robot velocity
             actual_twist = wheel_speeds_to_twist(measured_wheel_speeds_struct, module_angles, dt)
-
             print("Actual Twist:", actual_twist.vx, actual_twist.vy, actual_twist.w)
 
             await asyncio.sleep(0.005)
