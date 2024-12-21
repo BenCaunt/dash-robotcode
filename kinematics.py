@@ -171,7 +171,7 @@ def wheel_speeds_to_twist(speeds: WheelSpeeds, angles: ModuleAngles, dt: float) 
     # Calculate the twist
     twist = np.dot(inverse_transition, wheel_velocities)
 
-    return Twist2dVelocity(twist[0] / dt, twist[1] / dt, twist[2] / dt)
+    return Twist2dVelocity(twist[0], twist[1], twist[2])
 
 
 if __name__ == "__main__":
