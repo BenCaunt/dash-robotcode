@@ -2,11 +2,14 @@ import json
 import time
 import zenoh
 import pygame
+import math
 
 VELOCITY_KEY = "robot/control/velocity"
 ZERO_HEADING_KEY = "robot/control/zero_heading"
 MEASURED_TWIST_KEY = "robot/observed/twist"
 ODOMETRY_KEY = "robot/odom"
+WHEEL_VELOCITIES_KEY = "robot/observed/wheel_velocities"
+MODULE_ANGLES_KEY = "robot/observed/module_angles"
 
 # Adjust these indices as needed for your specific controller
 LEFT_X_AXIS = 0
@@ -31,6 +34,39 @@ def normalize_axis(value):
     # pygame returns axis values in [-1.0, 1.0]
     return value
 
+def wheel_velocities_callback(sample):
+    data = json.loads(sample.payload.decode("utf-8"))
+    # Access the wheel velocities
+    front_left = data["front_left"]
+    front_right = data["front_right"]
+    back_left = data["back_left"]
+    back_right = data["back_right"]
+    
+    # You can print them or use them as needed
+    print(f"Wheel Velocities (m/s):")
+    print(f"  FL: {front_left:.2f}")
+    print(f"  FR: {front_right:.2f}")
+    print(f"  BL: {back_left:.2f}")
+    print(f"  BR: {back_right:.2f}")
+
+def module_angles_callback(sample):
+    data = json.loads(sample.payload.decode("utf-8"))
+    # Access the module angles (in radians)
+    front_left = data["front_left"]
+    front_right = data["front_right"]
+    back_left = data["back_left"]
+    back_right = data["back_right"]
+    
+    # Convert to degrees for display
+    def rad2deg(rad):
+        return rad * 180.0 / math.pi
+    
+    print(f"Module Angles (degrees):")
+    print(f"  FL: {rad2deg(front_left):.1f}")
+    print(f"  FR: {rad2deg(front_right):.1f}")
+    print(f"  BL: {rad2deg(back_left):.1f}")
+    print(f"  BR: {rad2deg(back_right):.1f}")
+
 def main():
     # Initialize pygame and the joystick
     pygame.init()
@@ -51,6 +87,10 @@ def main():
 
     # NEW: Subscribe to odometry
     _ = session.declare_subscriber(ODOMETRY_KEY, odom_listener)
+
+    # Add these lines where you create other subscribers
+    session.declare_subscriber(WHEEL_VELOCITIES_KEY, wheel_velocities_callback)
+    session.declare_subscriber(MODULE_ANGLES_KEY, module_angles_callback)
 
     # Control scaling:
     max_speed = 0.5      # m/s
