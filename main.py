@@ -186,15 +186,16 @@ async def main():
             yaw_bias_integral += angular_velocity_constant * dt
             yaw = angle_wrap(imu_result.euler_rad.yaw - (offset - yaw_bias_integral))
 
-            twist = wheel_speeds_to_twist(wheel_speeds, module_angles, dt)
-            print(twist.vx, twist.vy, twist.w)
 
             measured_module_positions = {
                 result.id: result.values[moteus.Register.POSITION] for result in results if result.id in azimuth_ids
             }
 
             module_angles = measured_positions_to_module_angles(measured_module_positions, initial_module_positions)
+            twist = wheel_speeds_to_twist(wheel_speeds, module_angles, dt)
+
             print(module_angles)
+            print(twist.vx, twist.vy, twist.w)
 
             await asyncio.sleep(0.005)
 
