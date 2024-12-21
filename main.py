@@ -36,6 +36,7 @@ yaw_bias_integral = 0.0
 # The Zenoh keys we will subscribe to:
 VELOCITY_KEY = "robot/control/velocity"
 ZERO_HEADING_KEY = "robot/control/zero_heading"
+MEASURED_TWIST_KEY = "robot/observed/twist"
 
 def angle_wrap(angle):
     while angle > math.pi:
@@ -92,6 +93,9 @@ async def main():
     session = zenoh.open(z_conf)
     _ = session.declare_subscriber(VELOCITY_KEY, zenoh_velocity_listener)
     _ = session.declare_subscriber(ZERO_HEADING_KEY, zenoh_zero_heading_listener)
+
+    # Declare publisher for measured twist
+    measured_twist_pub = session.declare_publisher(MEASURED_TWIST_KEY)
 
     transport = moteus_pi3hat.Pi3HatRouter(
         servo_bus_map={1: [1, 2, 4], 2: [5, 6], 3: [3, 7, 8]},
@@ -235,6 +239,14 @@ async def main():
             # Use measured azimuth angles + measured wheel speeds to get actual robot velocity
             actual_twist = wheel_speeds_to_twist(measured_wheel_speeds_struct, module_angles, dt)
             print("Actual Twist:", actual_twist.vx, actual_twist.vy, actual_twist.w)
+
+            # Publish the measured twist
+            measured_twist_msg = json.dumps({
+                "vx": actual_twist.vx,
+                "vy": actual_twist.vy,
+                "omega": actual_twist.w  # rad/s
+            })
+            measured_twist_pub.put(measured_twist_msg)
 
             await asyncio.sleep(0.005)
 

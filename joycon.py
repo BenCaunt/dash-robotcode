@@ -5,6 +5,7 @@ import pygame
 
 VELOCITY_KEY = "robot/control/velocity"
 ZERO_HEADING_KEY = "robot/control/zero_heading"
+MEASURED_TWIST_KEY = "robot/observed/twist"
 
 # Adjust these indices as needed for your specific controller
 LEFT_X_AXIS = 0
@@ -43,6 +44,9 @@ def main():
     session = zenoh.open(zenoh.Config())
     vel_pub = session.declare_publisher(VELOCITY_KEY)
     zero_pub = session.declare_publisher(ZERO_HEADING_KEY)
+
+    # Subscribe to measured twist
+    _ = session.declare_subscriber(MEASURED_TWIST_KEY, measured_twist_listener)
 
     # Control scaling:
     max_speed = 0.5      # m/s
@@ -86,6 +90,17 @@ def main():
 
     session.close()
     pygame.quit()
+
+def measured_twist_listener(sample):
+    data_str = sample.payload.to_string()
+    try:
+        data = json.loads(data_str)
+        vx = data["vx"]
+        vy = data["vy"]
+        omega = data["omega"]  # rad/s
+        print(f"Measured Twist: vx={vx:.3f} m/s, vy={vy:.3f} m/s, omega={omega:.3f} rad/s")
+    except Exception as e:
+        print(f"Failed to parse measured twist: {e}")
 
 if __name__ == "__main__":
     main()
