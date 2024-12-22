@@ -180,7 +180,7 @@ async def main():
 
     # Create a rate limiter for each azimuth servo
     flipping_slew_rate_limiters = {
-        servo_id: FlippingSlewRateLimiter(max_rate=1.5, flip_cooldown=0.3)
+        servo_id: FlippingSlewRateLimiter(max_rate=10.5, flip_cooldown=0.1)
         for servo_id in azimuth_ids
     }
 
