@@ -89,52 +89,6 @@ def motor_speed_to_wheel_speed(motor_speed: float, drive_direction: float) -> fl
     """
     return motor_speed * DRIVE_CIRCUMFERENCE * DRIVE_REDUCTION * drive_direction
 
-# Add a new helper class to limit flipping and large instantaneous angle changes.
-class FlippingSlewRateLimiter:
-    def __init__(self, max_rate: float, flip_cooldown: float):
-        """
-        :param max_rate: Maximum allowed rate of angle change (radians/sec).
-        :param flip_cooldown: Minimum time between flips (seconds).
-        """
-        self.max_rate = max_rate
-        self.flip_cooldown = flip_cooldown
-        self.position = 0.0
-        self.last_flip_time = 0.0
-
-    def normalize_radians(self, angle: float) -> float:
-        while angle > math.pi:
-            angle -= 2 * math.pi
-        while angle < -math.pi:
-            angle += 2 * math.pi
-        return angle
-
-    def clamp(self, value: float, min_val: float, max_val: float) -> float:
-        return max(min_val, min(value, max_val))
-
-    def update(self, dt: float, current_time: float, new_target: float) -> float:
-        """
-        Returns a new limited angle based on the old 'self.position' and the new_target.
-        """
-        # Straight error
-        err_straight = self.normalize_radians(new_target - self.position)
-        # Flipped error (potential 180 shift)
-        err_flipped = self.normalize_radians(err_straight + math.pi)
-        # Determine which error is smaller in absolute value:
-        flip_predicate = abs(err_flipped) < abs(err_straight)
-
-        # If flipping is "better" and we've respected the cooldown, do it:
-        base_position = self.position
-        if flip_predicate and (current_time - self.last_flip_time) > self.flip_cooldown:
-            base_position += math.pi
-            self.last_flip_time = current_time
-
-        chosen_error = err_flipped if flip_predicate else err_straight
-        max_err = dt * self.max_rate
-        limited_change = self.clamp(chosen_error, -max_err, max_err)
-
-        self.position = self.normalize_radians(base_position + limited_change)
-        return self.position
-
 async def main():
     global reference_vx, reference_vy, reference_w, offset, is_initial_angle, reference_heading
     global yaw_bias_integral, angular_velocity_constant
@@ -171,21 +125,11 @@ async def main():
     module_scaling = {2: 1.0, 4: 1.0, 6: 1.0, 8: 1.0}
     module_inversions = {2: False, 4: False, 6: False, 8: False}
 
-    module_target_angles = {2: 0.0, 4: 0.0, 6: 0.0, 8: 0.0}  # cache final angles for each module
     # Store previous motor velocities
     previous_motor_velocities = {1: 0.0, 3: 0.0, 5: 0.0, 7: 0.0}
 
     loop_start = time.monotonic()
     dt = 0.005
-
-    # Create a rate limiter for each azimuth servo
-    flipping_slew_rate_limiters = {
-        servo_id: FlippingSlewRateLimiter(max_rate=10.5, flip_cooldown=0.1)
-        for servo_id in azimuth_ids
-    }
-
-    # Initialize a dictionary for wheel speeds so it's in scope.
-    measured_wheel_speeds_map = {servo_id: 0.0 for servo_id in drive_ids}
 
     try:
         while True:
@@ -214,44 +158,18 @@ async def main():
             commands = []
             # 1) Azimuth commands
             for servo_id in azimuth_ids:
-                current_angle = calculate_swerve_angle(measured_module_positions[servo_id]) \
-                                - calculate_swerve_angle(initial_module_positions[servo_id])
+                current_angle = calculate_swerve_angle(measured_module_positions[servo_id]) - \
+                                calculate_swerve_angle(initial_module_positions[servo_id])
                 current_angle = angle_wrap(current_angle)
 
-                raw_angle = -angle_wrap(module_angles.from_id(servo_id))
-                old_target = module_target_angles[servo_id]
+                target_angle = -angle_wrap(module_angles.from_id(servo_id))
+                error = angle_wrap(target_angle - current_angle)
+                module_scaling[servo_id] = np.cos(np.clip(error, -np.pi/2, np.pi/2))
 
-                # Slew-rate limit the raw angle
-                limited_angle = flipping_slew_rate_limiters[servo_id].update(dt, loop_start, raw_angle)
-
-                diff = angle_wrap(limited_angle - old_target)
-
-                # Use the measured_wheel_speeds_map from the *previous cycle*
-                # to decide if flipping is safe:
-                corresponding_drive_id = (servo_id - 1) if servo_id % 2 == 0 else (servo_id + 1)
-                wheel_speed_mag = abs(motor_speed_to_wheel_speed(
-                    measured_wheel_speeds_map.get(corresponding_drive_id, 0.0),
-                    drive_directions[corresponding_drive_id],
-                ))
-
-                enough_time_since_flip = (loop_start - flipping_slew_rate_limiters[servo_id].last_flip_time) > FORCED_FLIP_COOLDOWN
-                large_diff = abs(diff) > FLIP_THRESHOLD
-                wheel_slow = (wheel_speed_mag < ALLOWED_VELOCITY_FOR_FLIP)
-
-                if large_diff and enough_time_since_flip and wheel_slow:
-                    hypothetical_flipped = angle_wrap(limited_angle + math.pi)
-                    final_diff = abs(angle_wrap(hypothetical_flipped - old_target))
-
-                    if final_diff < abs(diff):
-                        limited_angle = hypothetical_flipped
-                        module_inversions[servo_id] = not module_inversions[servo_id]
-                        flipping_slew_rate_limiters[servo_id].last_flip_time = loop_start
-
-                target_angle = limited_angle
-                module_target_angles[servo_id] = target_angle
+                if abs(error) > np.pi / 2:
+                    module_inversions[servo_id] = not module_inversions[servo_id]
 
                 target_position_delta = calculate_target_position_delta(target_angle, current_angle)
-
                 commands.append(servos[servo_id].make_position(
                     position=measured_module_positions[servo_id] + target_position_delta,
                     velocity=0.0,
@@ -265,20 +183,15 @@ async def main():
             for servo_id in drive_ids:
                 commands.append(servos[servo_id].make_position(
                     position=math.nan,
-                    velocity=(
-                        (-1.0 if module_inversions[servo_id + 1] else 1.0)
-                        * module_scaling[servo_id + 1]
-                        * wheel_speed_to_motor_speed(wheel_speeds.from_id(servo_id))
-                        * drive_directions[servo_id]
-                    ),
+                    velocity=module_scaling[servo_id + 1] *
+                              wheel_speed_to_motor_speed(wheel_speeds.from_id(servo_id)) *
+                              drive_directions[servo_id],
                     maximum_torque=1.0 * 0.25,
                     query=True,
                 ))
 
-            # Now cycle to get servo results + IMU.
+            # Cycle to get servo results + IMU
             results = await transport.cycle(commands, request_attitude=True)
-
-            # Read the IMU, etc.
             imu_result = [x for x in results if x.id == -1 and isinstance(x, moteus_pi3hat.CanAttitudeWrapper)][0]
 
             # Gyro-based yaw offset logic
@@ -291,12 +204,11 @@ async def main():
             yaw_bias_integral += angular_velocity_constant * dt
             yaw = angle_wrap(imu_result.euler_rad.yaw - (offset - yaw_bias_integral))
 
-            # Update measured positions for modules
+            # Update measured positions
             measured_module_positions = {
                 r.id: r.values[moteus.Register.POSITION] for r in results if r.id in azimuth_ids
             }
-
-            # Update measured_wheel_speeds_map for the NEXT iteration
+            # Save measured motor velocities
             measured_wheel_speeds_map = {
                 r.id: r.values[moteus.Register.VELOCITY] for r in results if r.id in drive_ids
             }
