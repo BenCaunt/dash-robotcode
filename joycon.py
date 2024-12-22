@@ -35,14 +35,13 @@ def normalize_axis(value):
     return value
 
 def wheel_velocities_callback(sample):
-    data = json.loads(sample.payload.decode("utf-8"))
+    data = json.loads(sample.payload.to_string())
     # Access the wheel velocities
     front_left = data["front_left"]
     front_right = data["front_right"]
     back_left = data["back_left"]
     back_right = data["back_right"]
     
-    # You can print them or use them as needed
     print(f"Wheel Velocities (m/s):")
     print(f"  FL: {front_left:.2f}")
     print(f"  FR: {front_right:.2f}")
@@ -50,7 +49,7 @@ def wheel_velocities_callback(sample):
     print(f"  BR: {back_right:.2f}")
 
 def module_angles_callback(sample):
-    data = json.loads(sample.payload.decode("utf-8"))
+    data = json.loads(sample.payload.to_string())
     # Access the module angles (in radians)
     front_left = data["front_left"]
     front_right = data["front_right"]
@@ -82,15 +81,10 @@ def main():
     vel_pub = session.declare_publisher(VELOCITY_KEY)
     zero_pub = session.declare_publisher(ZERO_HEADING_KEY)
 
-    # Subscribe to measured twist
     _ = session.declare_subscriber(MEASURED_TWIST_KEY, measured_twist_listener)
-
-    # NEW: Subscribe to odometry
     _ = session.declare_subscriber(ODOMETRY_KEY, odom_listener)
-
-    # Add these lines where you create other subscribers
-    session.declare_subscriber(WHEEL_VELOCITIES_KEY, wheel_velocities_callback)
-    session.declare_subscriber(MODULE_ANGLES_KEY, module_angles_callback)
+    _ = session.declare_subscriber(WHEEL_VELOCITIES_KEY, wheel_velocities_callback)
+    _ = session.declare_subscriber(MODULE_ANGLES_KEY, module_angles_callback)
 
     # Control scaling:
     max_speed = 0.5      # m/s
