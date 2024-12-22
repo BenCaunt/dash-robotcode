@@ -3,6 +3,7 @@ import time
 import zenoh
 import pygame
 import math
+import threading
 
 # ---- NEW IMPORTS FOR RERUN:
 import rerun as rr
@@ -19,6 +20,7 @@ LEFT_X_AXIS = 0
 LEFT_Y_AXIS = 1
 RIGHT_X_AXIS = 2
 CIRCLE_BUTTON_INDEX = 1
+CROSS_BUTTON_INDEX = 0
 
 # Robot dimensions in meters (10 inch = 0.254 m).
 # We'll model the robot as a square for simplicity:
@@ -32,6 +34,8 @@ latest_modules = {
     "back_left": 0.0,
     "back_right": 0.0,
 }
+
+autonomous_running = False
 
 def apply_deadband(value, deadband=0.05):
     if abs(value) < deadband:
@@ -209,6 +213,16 @@ def update_rerun_viz():
     # back-right
     log_module_arrow(-half, -half, br_angle, "back_right_module")
 
+def autonomous_motion(vel_pub):
+    global autonomous_running
+    autonomous_running = True
+    print("Starting autonomous motion...")
+    for _ in range(40):
+        vel_pub.put(json.dumps({"vx": 0.40, "vy": 0.0, "omega": 0.0}))
+        time.sleep(0.05)
+    vel_pub.put(json.dumps({"vx": 0.0, "vy": 0.0, "omega": 0.0}))
+    print("Autonomous motion complete!")
+    autonomous_running = False
 
 def main():
     # Initialize rerun
@@ -246,6 +260,11 @@ def main():
     while running:
         pygame.event.pump()
 
+        # If the CROSS button is pressed and we aren't already in autonomous, launch it
+        cross_pressed = joy.get_button(CROSS_BUTTON_INDEX)
+        if cross_pressed and not autonomous_running:
+            threading.Thread(target=autonomous_motion, args=(vel_pub,), daemon=True).start()
+
         circle_pressed = joy.get_button(CIRCLE_BUTTON_INDEX)
         if circle_pressed:
             zero_pub.put("zero")
@@ -255,16 +274,17 @@ def main():
         ly = apply_deadband(normalize_axis(joy.get_axis(LEFT_Y_AXIS)))
         rx = apply_deadband(normalize_axis(joy.get_axis(RIGHT_X_AXIS)))
 
-        # Convert axes to velocity commands
-        vx = -ly * max_speed
-        vy = -lx * max_speed
-        omega = -rx * max_omega_deg
+        # If autonomous is running but joystick is at (0,0,0), skip sending gamepad commands
+        if not autonomous_running or (lx != 0.0 or ly != 0.0 or rx != 0.0):
+            # Convert axes to velocity commands
+            vx = -ly * max_speed
+            vy = -lx * max_speed
+            omega = -rx * max_omega_deg
 
-        cmd = json.dumps({"vx": vx, "vy": vy, "omega": omega})
-        print(cmd)
-        vel_pub.put(cmd)
+            cmd = json.dumps({"vx": vx, "vy": vy, "omega": omega})
+            print(cmd)
+            vel_pub.put(cmd)
 
-        # Limit update rate
         clock.tick(50)  # 50 Hz
 
     session.close()
