@@ -3,6 +3,7 @@ import time
 import zenoh
 import pygame
 import math
+import threading
 
 # ---- NEW IMPORTS FOR RERUN:
 import rerun as rr
