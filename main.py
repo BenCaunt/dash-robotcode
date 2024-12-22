@@ -184,6 +184,9 @@ async def main():
         for servo_id in azimuth_ids
     }
 
+    # Initialize a dictionary for wheel speeds so it's in scope.
+    measured_wheel_speeds_map = {servo_id: 0.0 for servo_id in drive_ids}
+
     try:
         while True:
             dt = time.monotonic() - loop_start
@@ -221,33 +224,24 @@ async def main():
                 # Slew-rate limit the raw angle
                 limited_angle = flipping_slew_rate_limiters[servo_id].update(dt, loop_start, raw_angle)
 
-                # Only do a forced 180 flip if difference remains large even after limiting:
                 diff = angle_wrap(limited_angle - old_target)
 
-                # OPTIONALLY: skip flipping if the corresponding drive wheel is spinning quickly
-                # We'll look up that drive wheel's measured speed in m/s:
+                # Use the measured_wheel_speeds_map from the *previous cycle*
+                # to decide if flipping is safe:
                 corresponding_drive_id = (servo_id - 1) if servo_id % 2 == 0 else (servo_id + 1)
                 wheel_speed_mag = abs(motor_speed_to_wheel_speed(
                     measured_wheel_speeds_map.get(corresponding_drive_id, 0.0),
                     drive_directions[corresponding_drive_id],
                 ))
 
-                # Check threshold and cooldown
-                enough_time_since_flip = (loop_start - flipping_slew_rate_limiters[servo_id].last_flip_time) \
-                                         > FORCED_FLIP_COOLDOWN
+                enough_time_since_flip = (loop_start - flipping_slew_rate_limiters[servo_id].last_flip_time) > FORCED_FLIP_COOLDOWN
                 large_diff = abs(diff) > FLIP_THRESHOLD
-                wheel_slow = (wheel_speed_mag < ALLOWED_VELOCITY_FOR_FLIP)  # if you want speed gating
+                wheel_slow = (wheel_speed_mag < ALLOWED_VELOCITY_FOR_FLIP)
 
-                # Attempt flip only if:
-                #  1) difference is large,
-                #  2) enough time passed since the last flip,
-                #  3) wheel is not spinning too fast (optional).
                 if large_diff and enough_time_since_flip and wheel_slow:
-                    # Calculate final difference if we flip
                     hypothetical_flipped = angle_wrap(limited_angle + math.pi)
                     final_diff = abs(angle_wrap(hypothetical_flipped - old_target))
 
-                    # Only flip if it truly reduces the difference
                     if final_diff < abs(diff):
                         limited_angle = hypothetical_flipped
                         module_inversions[servo_id] = not module_inversions[servo_id]
@@ -271,20 +265,20 @@ async def main():
             for servo_id in drive_ids:
                 commands.append(servos[servo_id].make_position(
                     position=math.nan,
-                    # -------------------------------------------------------------
                     velocity=(
                         (-1.0 if module_inversions[servo_id + 1] else 1.0)
                         * module_scaling[servo_id + 1]
                         * wheel_speed_to_motor_speed(wheel_speeds.from_id(servo_id))
                         * drive_directions[servo_id]
                     ),
-                    # -------------------------------------------------------------
                     maximum_torque=1.0 * 0.25,
                     query=True,
                 ))
 
-            # Cycle to get servo results + IMU
+            # Now cycle to get servo results + IMU.
             results = await transport.cycle(commands, request_attitude=True)
+
+            # Read the IMU, etc.
             imu_result = [x for x in results if x.id == -1 and isinstance(x, moteus_pi3hat.CanAttitudeWrapper)][0]
 
             # Gyro-based yaw offset logic
@@ -297,11 +291,12 @@ async def main():
             yaw_bias_integral += angular_velocity_constant * dt
             yaw = angle_wrap(imu_result.euler_rad.yaw - (offset - yaw_bias_integral))
 
-            # Update measured positions
+            # Update measured positions for modules
             measured_module_positions = {
                 r.id: r.values[moteus.Register.POSITION] for r in results if r.id in azimuth_ids
             }
-            # Save measured motor velocities
+
+            # Update measured_wheel_speeds_map for the NEXT iteration
             measured_wheel_speeds_map = {
                 r.id: r.values[moteus.Register.VELOCITY] for r in results if r.id in drive_ids
             }
