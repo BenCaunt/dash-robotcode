@@ -14,6 +14,8 @@ from geometry2d import Transform2d, Twist2d, Twist2dVelocity
 
 import zenoh
 
+from utils import angle_wrap
+
 AZIMUTH_RATIO = 12.0 / 75.0
 DRIVE_REDUCTION = (25.0/21.0) * (15.0/45.0)
 DRIVE_DIAMETER = 0.075  # 75 mm
@@ -42,12 +44,7 @@ MODULE_ANGLES_KEY = "robot/observed/module_angles"
 
 
 
-def angle_wrap(angle):
-    while angle > math.pi:
-        angle -= 2 * math.pi
-    while angle < -math.pi:
-        angle += 2 * math.pi
-    return angle
+
 
 def calculate_swerve_angle(position: float) -> float:
     return angle_wrap(position * 2 * math.pi * AZIMUTH_RATIO)
@@ -198,6 +195,8 @@ async def main():
                 offset = imu_result.euler_rad.yaw
                 yaw_bias_integral = 0.0
                 angular_velocity_constant = np.deg2rad(imu_result.rate_dps.z)
+                pose = Transform2d(0.0, 0.0, 0.0)
+
                 is_initial_angle = False
 
             yaw_bias_integral += angular_velocity_constant * dt

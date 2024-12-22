@@ -9,6 +9,7 @@ import threading
 import rerun as rr
 import numpy as np
 
+from utils import angle_wrap
 VELOCITY_KEY = "robot/control/velocity"
 ZERO_HEADING_KEY = "robot/control/zero_heading"
 MEASURED_TWIST_KEY = "robot/observed/twist"
@@ -215,13 +216,30 @@ def update_rerun_viz():
 
 def autonomous_motion(vel_pub):
     global autonomous_running
+    
     autonomous_running = True
     print("Starting autonomous motion...")
-    for _ in range(40):
-        vel_pub.put(json.dumps({"vx": 0.40, "vy": 0.0, "omega": 0.0}))
+    # for _ in range(40):
+    #     vel_pub.put(json.dumps({"vx": 0.40, "vy": 0.0, "omega": 0.0}))
+    #     time.sleep(0.05)
+    # vel_pub.put(json.dumps({"vx": 0.0, "vy": 0.0, "omega": 0.0}))
+    dx = 0.0 - latest_odom["x"]
+    dy = 0.0 - latest_odom["y"]
+    theta = angle_wrap(0.0 - latest_odom["theta"])
+
+    trans_gain = 0.9
+    omega_gain = 50.0 # tuned for deg/s 
+
+    while np.linalg.norm([dx, dy]) > 0.1 and np.abs(theta) > np.deg2rad(10.0):
+        dx = 0.0 - latest_odom["x"]
+        dy = 0.0 - latest_odom["y"]
+        theta = angle_wrap(0.0 - latest_odom["theta"])
+        vel_pub.put(json.dumps({"vx": dx * trans_gain, "vy": dy * trans_gain, "omega": theta * omega_gain}))
         time.sleep(0.05)
+    
     vel_pub.put(json.dumps({"vx": 0.0, "vy": 0.0, "omega": 0.0}))
-    print("Autonomous motion complete!")
+
+
     autonomous_running = False
 
 def main():
@@ -249,8 +267,8 @@ def main():
     _ = session.declare_subscriber(MODULE_ANGLES_KEY, module_angles_callback)
 
     # Control scaling
-    max_speed = 0.5        # m/s
-    max_omega_deg = 240.0  # deg/s
+    max_speed = 1.5       # m/s
+    max_omega_deg = 360.0 * 3.0  # deg/s
 
     # Send zero velocity at start
     vel_pub.put(json.dumps({"vx": 0.0, "vy": 0.0, "omega": 0.0}))
