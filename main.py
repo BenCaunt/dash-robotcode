@@ -125,6 +125,7 @@ async def main():
     module_scaling = {2: 1.0, 4: 1.0, 6: 1.0, 8: 1.0}
     module_inversions = {2: False, 4: False, 6: False, 8: False}
 
+    module_target_angles = {2: 0.0, 4: 0.0, 6: 0.0, 8: 0.0}  # cache final angles for each module
     # Store previous motor velocities
     previous_motor_velocities = {1: 0.0, 3: 0.0, 5: 0.0, 7: 0.0}
 
@@ -163,19 +164,23 @@ async def main():
                 current_angle = angle_wrap(current_angle)
 
                 # -------------------------------------------------------------
-                # NEW LOGIC: minimize rotation by flipping angle + velocity
+                # NEW LOGIC: Compare the new raw angle to the previous *chosen* angle,
+                # so we don't repeatedly flip if the measured angle is behind.
                 raw_angle = -angle_wrap(module_angles.from_id(servo_id))
-                diff = angle_wrap(raw_angle - current_angle)
+                old_target = module_target_angles[servo_id]
+ 
+                # Check difference relative to previously chosen angle:
+                diff = angle_wrap(raw_angle - old_target)
                 if abs(diff) > math.pi / 2:
-                    # Flip angle by 180°
+                    # Flip the angle by 180
                     raw_angle = angle_wrap(raw_angle + math.pi)
-                    # Also invert drive direction stored for this servo_id
-                    # (You might store a boolean "drive_inversions" or simply
-                    # scale the velocity by -1 in the drive commands below.)
+                    # Also invert drive direction for this servo
                     module_inversions[servo_id] = not module_inversions[servo_id]
-
+ 
                 # We'll use raw_angle as our final target angle
                 target_angle = raw_angle
+                # Cache in the dictionary so next cycle references the same final angle
+                module_target_angles[servo_id] = target_angle
                 # -------------------------------------------------------------
 
                 target_position_delta = calculate_target_position_delta(target_angle, current_angle)
@@ -194,7 +199,6 @@ async def main():
                 commands.append(servos[servo_id].make_position(
                     position=math.nan,
                     # -------------------------------------------------------------
-                    # If module_inversions[servo_id + 1] is True, negate the velocity to reverse wheel direction
                     velocity=(
                         (-1.0 if module_inversions[servo_id + 1] else 1.0)
                         * module_scaling[servo_id + 1]
