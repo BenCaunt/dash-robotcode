@@ -3,7 +3,6 @@ import time
 import zenoh
 import pygame
 import math
-import threading
 
 # ---- NEW IMPORTS FOR RERUN:
 import rerun as rr
@@ -20,7 +19,6 @@ LEFT_X_AXIS = 0
 LEFT_Y_AXIS = 1
 RIGHT_X_AXIS = 2
 CIRCLE_BUTTON_INDEX = 1
-CROSS_BUTTON_INDEX = 0
 
 # Robot dimensions in meters (10 inch = 0.254 m).
 # We'll model the robot as a square for simplicity:
@@ -34,8 +32,6 @@ latest_modules = {
     "back_left": 0.0,
     "back_right": 0.0,
 }
-
-autonomous_running = False
 
 def apply_deadband(value, deadband=0.05):
     if abs(value) < deadband:

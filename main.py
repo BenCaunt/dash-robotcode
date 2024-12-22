@@ -89,6 +89,51 @@ def motor_speed_to_wheel_speed(motor_speed: float, drive_direction: float) -> fl
     """
     return motor_speed * DRIVE_CIRCUMFERENCE * DRIVE_REDUCTION * drive_direction
 
+# Add a new helper class to limit flipping and large instantaneous angle changes.
+class FlippingSlewRateLimiter:
+    def __init__(self, max_rate: float, flip_cooldown: float):
+        """
+        :param max_rate: Maximum allowed rate of angle change (radians/sec).
+        :param flip_cooldown: Not specifically used here, but can be used
+                              to enforce a minimum time between flips.
+        """
+        self.max_rate = max_rate
+        self.flip_cooldown = flip_cooldown
+        self.position = 0.0
+        self.last_flip_time = 0.0
+
+    def normalize_radians(self, angle: float) -> float:
+        while angle > math.pi:
+            angle -= 2 * math.pi
+        while angle < -math.pi:
+            angle += 2 * math.pi
+        return angle
+
+    def clamp(self, value: float, min_val: float, max_val: float) -> float:
+        return max(min_val, min(value, max_val))
+
+    def update(self, dt: float, current_time: float, new_target: float) -> float:
+        """
+        Returns a new limited angle based on the old 'self.position' and the new_target.
+        """
+        # Straight error
+        err_straight = self.normalize_radians(new_target - self.position)
+        # Flipped error (potential 180 shift)
+        err_flipped = self.normalize_radians(err_straight + math.pi)
+        # Determine which error is smaller in absolute value
+        flip_predicate = abs(err_flipped) < abs(err_straight)
+
+        # If flipping is "better," shift the position by PI (equivalent to flipping).
+        base_position = self.position + (math.pi if flip_predicate else 0.0)
+        chosen_error = err_flipped if flip_predicate else err_straight
+
+        # Limit the error based on max_rate
+        max_err = dt * self.max_rate
+        limited_change = self.clamp(chosen_error, -max_err, max_err)
+        self.position = self.normalize_radians(base_position + limited_change)
+
+        return self.position
+
 async def main():
     global reference_vx, reference_vy, reference_w, offset, is_initial_angle, reference_heading
     global yaw_bias_integral, angular_velocity_constant
@@ -132,6 +177,12 @@ async def main():
     loop_start = time.monotonic()
     dt = 0.005
 
+    # Create a rate limiter for each azimuth servo
+    flipping_slew_rate_limiters = {
+        servo_id: FlippingSlewRateLimiter(max_rate=2.0, flip_cooldown=0.2)
+        for servo_id in azimuth_ids
+    }
+
     try:
         while True:
             dt = time.monotonic() - loop_start
@@ -163,25 +214,21 @@ async def main():
                                 calculate_swerve_angle(initial_module_positions[servo_id])
                 current_angle = angle_wrap(current_angle)
 
-                # -------------------------------------------------------------
-                # NEW LOGIC: Compare the new raw angle to the previous *chosen* angle,
-                # so we don't repeatedly flip if the measured angle is behind.
                 raw_angle = -angle_wrap(module_angles.from_id(servo_id))
                 old_target = module_target_angles[servo_id]
- 
-                # Check difference relative to previously chosen angle:
-                diff = angle_wrap(raw_angle - old_target)
+
+                # Pass the new raw angle to the rate limiter for this servo
+                limited_angle = flipping_slew_rate_limiters[servo_id].update(dt, loop_start, raw_angle)
+
+                # (Optional) If difference is still huge, do a final check for a forced flip:
+                diff = angle_wrap(limited_angle - old_target)
                 if abs(diff) > math.pi / 2:
-                    # Flip the angle by 180
-                    raw_angle = angle_wrap(raw_angle + math.pi)
-                    # Also invert drive direction for this servo
+                    limited_angle = angle_wrap(limited_angle + math.pi)
                     module_inversions[servo_id] = not module_inversions[servo_id]
- 
-                # We'll use raw_angle as our final target angle
-                target_angle = raw_angle
-                # Cache in the dictionary so next cycle references the same final angle
+
+                # We'll use limited_angle as our final target angle
+                target_angle = limited_angle
                 module_target_angles[servo_id] = target_angle
-                # -------------------------------------------------------------
 
                 target_position_delta = calculate_target_position_delta(target_angle, current_angle)
 
