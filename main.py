@@ -162,14 +162,24 @@ async def main():
                                 calculate_swerve_angle(initial_module_positions[servo_id])
                 current_angle = angle_wrap(current_angle)
 
-                target_angle = -angle_wrap(module_angles.from_id(servo_id))
-                error = angle_wrap(target_angle - current_angle)
-                module_scaling[servo_id] = np.cos(np.clip(error, -np.pi/2, np.pi/2))
-
-                if abs(error) > np.pi / 2:
+                # -------------------------------------------------------------
+                # NEW LOGIC: minimize rotation by flipping angle + velocity
+                raw_angle = -angle_wrap(module_angles.from_id(servo_id))
+                diff = angle_wrap(raw_angle - current_angle)
+                if abs(diff) > math.pi / 2:
+                    # Flip angle by 180°
+                    raw_angle = angle_wrap(raw_angle + math.pi)
+                    # Also invert drive direction stored for this servo_id
+                    # (You might store a boolean "drive_inversions" or simply
+                    # scale the velocity by -1 in the drive commands below.)
                     module_inversions[servo_id] = not module_inversions[servo_id]
 
+                # We'll use raw_angle as our final target angle
+                target_angle = raw_angle
+                # -------------------------------------------------------------
+
                 target_position_delta = calculate_target_position_delta(target_angle, current_angle)
+
                 commands.append(servos[servo_id].make_position(
                     position=measured_module_positions[servo_id] + target_position_delta,
                     velocity=0.0,
@@ -183,9 +193,15 @@ async def main():
             for servo_id in drive_ids:
                 commands.append(servos[servo_id].make_position(
                     position=math.nan,
-                    velocity=module_scaling[servo_id + 1] *
-                              wheel_speed_to_motor_speed(wheel_speeds.from_id(servo_id)) *
-                              drive_directions[servo_id],
+                    # -------------------------------------------------------------
+                    # If module_inversions[servo_id + 1] is True, negate the velocity to reverse wheel direction
+                    velocity=(
+                        (-1.0 if module_inversions[servo_id + 1] else 1.0)
+                        * module_scaling[servo_id + 1]
+                        * wheel_speed_to_motor_speed(wheel_speeds.from_id(servo_id))
+                        * drive_directions[servo_id]
+                    ),
+                    # -------------------------------------------------------------
                     maximum_torque=1.0 * 0.25,
                     query=True,
                 ))
