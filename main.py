@@ -196,7 +196,6 @@ async def main():
                 yaw_bias_integral = 0.0
                 angular_velocity_constant = np.deg2rad(imu_result.rate_dps.z)
                 pose = Transform2d(0.0, 0.0, 0.0)
-
                 is_initial_angle = False
 
             yaw_bias_integral += angular_velocity_constant * dt

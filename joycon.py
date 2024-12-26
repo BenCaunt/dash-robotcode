@@ -8,6 +8,9 @@ import threading
 # ---- NEW IMPORTS FOR RERUN:
 import rerun as rr
 import numpy as np
+from geometry2d import Transform2d, Vector2d
+from auton import autonomous_motion, RobotContext, autonomous_running
+from constraints import DASH_MOVEMENT_CONSTRAINT
 
 from utils import angle_wrap
 VELOCITY_KEY = "robot/control/velocity"
@@ -16,6 +19,7 @@ MEASURED_TWIST_KEY = "robot/observed/twist"
 ODOMETRY_KEY = "robot/odom"
 WHEEL_VELOCITIES_KEY = "robot/observed/wheel_velocities"
 MODULE_ANGLES_KEY = "robot/observed/module_angles"
+LIDAR_SCAN_KEY = "lidar/scan"
 
 LEFT_X_AXIS = 0
 LEFT_Y_AXIS = 1
@@ -27,6 +31,10 @@ CROSS_BUTTON_INDEX = 0  # For example, set to whichever index CROSS should be
 # We'll model the robot as a square for simplicity:
 ROBOT_SIZE = 0.254
 
+# Retrieve control scaling from constraints
+max_speed = DASH_MOVEMENT_CONSTRAINT.max_velocity.vx
+max_omega_deg = DASH_MOVEMENT_CONSTRAINT.max_velocity.w
+
 # Track global states for visualization:
 latest_odom = {"x": 0.0, "y": 0.0, "theta": 0.0}
 latest_modules = {
@@ -36,7 +44,6 @@ latest_modules = {
     "back_right": 0.0,
 }
 
-autonomous_running = False
 
 def apply_deadband(value, deadband=0.05):
     if abs(value) < deadband:
@@ -106,6 +113,37 @@ def measured_twist_listener(sample):
     except Exception as e:
         print(f"Failed to parse measured twist: {e}")
 
+def to_global(px, py, rx, ry, rtheta):
+    """
+    Use geometry2d.Transform2d to convert local (px, py) into global coords,
+    given robot pose (rx, ry, rtheta).
+    """
+    # Create a Transform2d for the robot’s global pose:
+    robot_tf = Transform2d(rx, ry, rtheta)
+    # Create a Transform2d for the point in local frame:
+    point_local_tf = Transform2d(px, py, 0.0)
+    # Combine them:
+    point_global_tf = robot_tf * point_local_tf
+    return (point_global_tf.x, point_global_tf.y)
+
+def lidar_callback(sample):
+    data_str = sample.payload.to_string()
+    try:
+        data = json.loads(data_str)  # expecting a list of { "x": float, "y": float }
+        points_global = []
+        for p in data:
+            gx, gy = to_global(
+                p["x"],
+                -p["y"],  # Mirror Y usage
+                latest_odom["x"],
+                -latest_odom["y"],
+                latest_odom["theta"]
+            )
+            points_global.append([gx, gy])
+        rr.log("lidar_scan", rr.Points2D(points_global))
+    except Exception as e:
+        print(f"Failed to parse lidar scan: {e}")
+
 def update_rerun_viz():
     """
     Re-logs the position of the robot and the direction of each module
@@ -135,15 +173,11 @@ def update_rerun_viz():
         ( half,  half),
     ]
 
-    # SE(2) transform each local corner to global coordinates:
-    def se2_transform(px, py, rx, ry, rtheta):
-        cos_t = math.cos(rtheta)
-        sin_t = math.sin(rtheta)
-        gx = rx + cos_t*px - sin_t*py
-        gy = ry + sin_t*px + cos_t*py
-        return (gx, gy)
-
-    global_corners = [se2_transform(cx, cy, x, y, theta) for (cx, cy) in local_corners]
+    # Instead of se2_transform, use to_global for each local corner:
+    global_corners = []
+    for (cx, cy) in local_corners:
+        gx, gy = to_global(cx, cy, x, y, theta)
+        global_corners.append((gx, gy))
 
     # Log a single line strip for the robot’s perimeter:
     rr.log(
@@ -186,7 +220,7 @@ def update_rerun_viz():
 
     def log_module_arrow(offset_x, offset_y, module_angle, name):
         # transform local offset to global “origin”:
-        mod_origin = se2_transform(offset_x, offset_y, x, y, theta)
+        mod_origin = to_global(offset_x, offset_y, x, y, theta)
         # direction is robot heading + module angle
         total_angle = theta + module_angle
         vx = module_arrow_len * math.cos(total_angle)
@@ -214,34 +248,6 @@ def update_rerun_viz():
     # back-right
     log_module_arrow(-half, -half, br_angle, "back_right_module")
 
-def autonomous_motion(vel_pub):
-    global autonomous_running
-    
-    autonomous_running = True
-    print("Starting autonomous motion...")
-    # for _ in range(40):
-    #     vel_pub.put(json.dumps({"vx": 0.40, "vy": 0.0, "omega": 0.0}))
-    #     time.sleep(0.05)
-    # vel_pub.put(json.dumps({"vx": 0.0, "vy": 0.0, "omega": 0.0}))
-    dx = 0.0 - latest_odom["x"]
-    dy = 0.0 - latest_odom["y"]
-    theta = angle_wrap(0.0 - latest_odom["theta"])
-
-    trans_gain = 0.9
-    omega_gain = 50.0 # tuned for deg/s 
-
-    while np.linalg.norm([dx, dy]) > 0.1 and np.abs(theta) > np.deg2rad(10.0):
-        dx = 0.0 - latest_odom["x"]
-        dy = 0.0 - latest_odom["y"]
-        theta = angle_wrap(0.0 - latest_odom["theta"])
-        vel_pub.put(json.dumps({"vx": dx * trans_gain, "vy": dy * trans_gain, "omega": theta * omega_gain}))
-        time.sleep(0.05)
-    
-    vel_pub.put(json.dumps({"vx": 0.0, "vy": 0.0, "omega": 0.0}))
-
-
-    autonomous_running = False
-
 def main():
     # Initialize rerun
     rr.init("my_swerve_rerun", spawn=True)
@@ -253,7 +259,7 @@ def main():
         print("No joystick detected!")
         return
     joy = pygame.joystick.Joystick(0)
-    joy.init()
+    joy.init() 
 
     # Open Zenoh session
     session = zenoh.open(zenoh.Config())
@@ -265,13 +271,19 @@ def main():
     _ = session.declare_subscriber(ODOMETRY_KEY, odom_listener)
     _ = session.declare_subscriber(WHEEL_VELOCITIES_KEY, wheel_velocities_callback)
     _ = session.declare_subscriber(MODULE_ANGLES_KEY, module_angles_callback)
+    _ = session.declare_subscriber(LIDAR_SCAN_KEY, lidar_callback)
 
-    # Control scaling
-    max_speed = 1.5       # m/s
-    max_omega_deg = 360.0 * 3.0  # deg/s
 
     # Send zero velocity at start
     vel_pub.put(json.dumps({"vx": 0.0, "vy": 0.0, "omega": 0.0}))
+
+    # Create a context object for the external autonomous plugin to access
+    robot_ctx = RobotContext(
+        vel_pub=vel_pub,
+        latest_odom=latest_odom, 
+        max_speed=max_speed, 
+        max_omega_deg=max_omega_deg
+    )
 
     clock = pygame.time.Clock()
     running = True
@@ -281,7 +293,7 @@ def main():
         # If the CROSS button is pressed and we aren't already in autonomous, launch it
         cross_pressed = joy.get_button(CROSS_BUTTON_INDEX)
         if cross_pressed and not autonomous_running:
-            threading.Thread(target=autonomous_motion, args=(vel_pub,), daemon=True).start()
+            threading.Thread(target=autonomous_motion, args=(robot_ctx,), daemon=True).start()
 
         circle_pressed = joy.get_button(CIRCLE_BUTTON_INDEX)
         if circle_pressed:
