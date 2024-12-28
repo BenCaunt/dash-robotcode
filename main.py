@@ -15,6 +15,10 @@ from geometry2d import Transform2d, Twist2d, Twist2dVelocity
 import zenoh
 
 from utils import angle_wrap
+from constants import (
+    VELOCITY_KEY, ZERO_HEADING_KEY, MEASURED_TWIST_KEY,
+    ODOMETRY_KEY, WHEEL_VELOCITIES_KEY, MODULE_ANGLES_KEY
+)
 
 AZIMUTH_RATIO = 12.0 / 75.0
 DRIVE_REDUCTION = (25.0/21.0) * (15.0/45.0)
@@ -33,18 +37,6 @@ reference_heading = 0.0
 gain = 0.1
 angular_velocity_constant = 0.0
 yaw_bias_integral = 0.0
-
-# The Zenoh keys we will subscribe to:
-VELOCITY_KEY = "robot/control/velocity"
-ZERO_HEADING_KEY = "robot/control/zero_heading"
-MEASURED_TWIST_KEY = "robot/observed/twist"
-ODOMETRY_KEY = "robot/odom"
-WHEEL_VELOCITIES_KEY = "robot/observed/wheel_velocities"
-MODULE_ANGLES_KEY = "robot/observed/module_angles"
-
-
-
-
 
 def calculate_swerve_angle(position: float) -> float:
     return angle_wrap(position * 2 * math.pi * AZIMUTH_RATIO)

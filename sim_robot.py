@@ -1,5 +1,5 @@
 import numpy as np
-from constraints import SE2Constraint
+from constants import SE2Constraint, VELOCITY_KEY, ZERO_HEADING_KEY, ODOMETRY_KEY, WHEEL_VELOCITIES_KEY, MODULE_ANGLES_KEY, MEASURED_TWIST_KEY
 from geometry2d import Transform2d, Twist2dVelocity
 from motion import SE2Trajectory
 
@@ -11,14 +11,6 @@ import math
 
 # We'll reuse kinematics helpers to produce module angles, etc.
 from kinematics import twist_to_wheel_speeds, ModuleAngles, WheelSpeeds
-
-# Zenoh keys consistent with the robot code
-VELOCITY_KEY = "robot/control/velocity"
-ZERO_HEADING_KEY = "robot/control/zero_heading"
-ODOMETRY_KEY = "robot/odom"
-WHEEL_VELOCITIES_KEY = "robot/observed/wheel_velocities"
-MODULE_ANGLES_KEY = "robot/observed/module_angles"
-MEASURED_TWIST_KEY = "robot/observed/twist"
 
 class SimRobot:
     def __init__(self, initial_pose: Transform2d, robot_constraints: SE2Constraint):

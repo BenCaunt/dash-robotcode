@@ -1,7 +1,7 @@
 from typing import List
 from geometry2d import Transform2d, Vector2d, Twist2d, Twist2dVelocity
 from dataclasses import dataclass
-from constraints import SE2Constraint, DASH_MOVEMENT_CONSTRAINT
+from constants import SE2Constraint, DASH_MOVEMENT_CONSTRAINT
 
 
 

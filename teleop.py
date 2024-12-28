@@ -10,16 +10,13 @@ import rerun as rr
 import numpy as np
 from geometry2d import Transform2d, Vector2d
 from auton import autonomous_motion, RobotContext, autonomous_running
-from constraints import DASH_MOVEMENT_CONSTRAINT
+from constants import (
+    VELOCITY_KEY, ZERO_HEADING_KEY, MEASURED_TWIST_KEY,
+    ODOMETRY_KEY, WHEEL_VELOCITIES_KEY, MODULE_ANGLES_KEY,
+    LIDAR_SCAN_KEY, DASH_MOVEMENT_CONSTRAINT
+)
 
 from utils import angle_wrap
-VELOCITY_KEY = "robot/control/velocity"
-ZERO_HEADING_KEY = "robot/control/zero_heading"
-MEASURED_TWIST_KEY = "robot/observed/twist"
-ODOMETRY_KEY = "robot/odom"
-WHEEL_VELOCITIES_KEY = "robot/observed/wheel_velocities"
-MODULE_ANGLES_KEY = "robot/observed/module_angles"
-LIDAR_SCAN_KEY = "lidar/scan"
 
 LEFT_X_AXIS = 0
 LEFT_Y_AXIS = 1

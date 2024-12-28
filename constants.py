@@ -17,5 +17,14 @@ DASH_MOVEMENT_CONSTRAINT = SE2Constraint(
     robot_radius=(11.0 / 2.0) * inches_to_meters
 )
 
+# Zenoh keys
+VELOCITY_KEY = "robot/control/velocity"
+ZERO_HEADING_KEY = "robot/control/zero_heading"
+MEASURED_TWIST_KEY = "robot/observed/twist"
+ODOMETRY_KEY = "robot/odom"
+WHEEL_VELOCITIES_KEY = "robot/observed/wheel_velocities"
+MODULE_ANGLES_KEY = "robot/observed/module_angles"
+LIDAR_SCAN_KEY = "lidar/scan"
+
 
 
