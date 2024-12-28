@@ -23,6 +23,8 @@ class WheelSpeeds:
     back_right: float
 
     def from_id(self, id: int) -> float:
+
+        # TODO: Make this import from constants or json 
         assert id % 2 == 1
         if id == 1:
             return self.front_left
@@ -45,6 +47,7 @@ class ModuleAngles:
 
     def from_id(self, id: int) -> float:
         assert id % 2 == 0
+        # TODO: See above
         if id == 4:
             return self.front_left_angle
         elif id == 8:
