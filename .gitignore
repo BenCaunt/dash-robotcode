@@ -1,0 +1,30 @@
+# Ignore all images
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tiff
+*.gif
+
+# Ignore all videos
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wmv
+
+# Ignore all JSON files
+# *.json 
+
+# Ignore all CSV files
+*.csv
+
+# Ignore all log files
+*.log
+
+# Ignore all pyc files
+*.pyc
+
+__pycache__/
+
+
