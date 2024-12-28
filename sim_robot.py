@@ -118,7 +118,7 @@ async def simulation_loop(robot: SimRobot, dt=0.05):
 
 
     
-        if np.linalg.norm(np.array([current_twist.vx, current_twist.vy])) > 0.01:
+        if np.linalg.norm(np.array([current_twist.vx, current_twist.vy])) > 0.01 or np.abs(current_twist.w) > 0.01:
             ma_msg = json.dumps({
                 "front_left": -module_angles.front_left_angle,
                 "front_right": -module_angles.front_right_angle,
