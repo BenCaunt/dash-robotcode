@@ -4,6 +4,7 @@ import zenoh
 import pygame
 import math
 import threading
+import cv2
 
 # ---- NEW IMPORTS FOR RERUN:
 import rerun as rr
@@ -245,6 +246,25 @@ def update_rerun_viz():
     # back-right
     log_module_arrow(-half, -half, br_angle, "back_right_module")
 
+def image_listener(sample):
+    """
+    Decode image from raw bytes (ZBytes => bytes) and log to Rerun.
+    """
+    np_data = np.frombuffer(sample.payload.to_bytes(), dtype=np.uint8)
+    received_img = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+    if received_img is not None:
+        rr.log("robot/camera/undistorted", rr.Image(received_img))
+
+def poses_listener(sample):
+    """
+    Convert JSON string into Python objects for apriltag poses and print them.
+    """
+    poses_str = sample.payload.to_string()
+    poses_data = json.loads(poses_str)
+    print(f"Received {len(poses_data)} tag(s):")
+    for pose_info in poses_data:
+        print(f"  ID {pose_info['tag_id']} => SE3: {pose_info['SE3']}")
+
 def main():
     # Initialize rerun
     rr.init("my_swerve_rerun", spawn=True)
@@ -270,6 +290,10 @@ def main():
     _ = session.declare_subscriber(MODULE_ANGLES_KEY, module_angles_callback)
     _ = session.declare_subscriber(LIDAR_SCAN_KEY, lidar_callback)
 
+    # --- NEW SUBSCRIBERS INTEGRATED FROM APRILTAG_SUBSCRIBER ---
+    session.declare_subscriber("robot/camera/undistorted", image_listener)
+    session.declare_subscriber("robot/camera/tag_poses", poses_listener)
+    # -----------------------------------------------------------
 
     # Send zero velocity at start
     vel_pub.put(json.dumps({"vx": 0.0, "vy": 0.0, "omega": 0.0}))

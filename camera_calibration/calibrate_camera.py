@@ -7,13 +7,13 @@ import numpy as np
 def main():
     # ----- Parameters you will need to tweak -----
     # Checkerboard pattern: number of interior corners in each dimension
-    # 11 by 8 checkerboard but it is interior corners so its 10 by 7
+    # 11 by 8 checkerboard but it is interior corners so its
     checkerboard_size = (10, 7)
 
     # Real-world dimensions of each checkerboard square (in meters, for instance)
     # If you only need relative scaling, the exact unit can be arbitrary,
     # e.g., 0.025 for a 2.5cm square
-    square_size = 0.1825 # 18.25 cm
+    square_size = 0.01825 # 18.25mm
 
     # Folder with calibration images
     folder_path = "calibration_captures/*.png"
