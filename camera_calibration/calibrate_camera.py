@@ -13,7 +13,7 @@ def main():
     # Real-world dimensions of each checkerboard square (in meters, for instance)
     # If you only need relative scaling, the exact unit can be arbitrary,
     # e.g., 0.025 for a 2.5cm square
-    square_size = 0.01825 # 18.25mm
+    square_size = 0.1825 # 18.25 cm
 
     # Folder with calibration images
     folder_path = "calibration_captures/*.png"
