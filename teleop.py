@@ -16,6 +16,7 @@ from constants import (
     ODOMETRY_KEY, WHEEL_VELOCITIES_KEY, MODULE_ANGLES_KEY,
     LIDAR_SCAN_KEY, DASH_MOVEMENT_CONSTRAINT
 )
+from rerun import RotationAxisAngle, Angle
 
 from utils import angle_wrap
 
@@ -28,6 +29,7 @@ CROSS_BUTTON_INDEX = 0  # For example, set to whichever index CROSS should be
 # Robot dimensions in meters (10 inch = 0.254 m).
 # We'll model the robot as a square for simplicity:
 ROBOT_SIZE = 0.254
+ROBOT_HEIGHT = 0.254  # new - 10 inch height
 
 # Retrieve control scaling from constraints
 max_speed = DASH_MOVEMENT_CONSTRAINT.max_velocity.vx
@@ -246,6 +248,111 @@ def update_rerun_viz():
     # back-right
     log_module_arrow(-half, -half, br_angle, "back_right_module")
 
+def update_rerun_viz_3d():
+    """
+    Log a 3D bounding box for the robot, a pinned transform for a camera,
+    and 3D arrows for each swerve module’s orientation.
+    """
+    x = latest_odom["x"]
+    y = -latest_odom["y"]
+    theta = -latest_odom["theta"]  # in radians
+
+    # Robot center in global coordinates:
+    # We'll model as a 3D box with half-sizes of (ROBOT_SIZE/2, ROBOT_SIZE/2, ROBOT_HEIGHT/2).
+    half_x = ROBOT_SIZE / 2.0
+    half_y = ROBOT_SIZE / 2.0
+    half_z = ROBOT_HEIGHT / 2.0
+
+    # Construct quaternion for a yaw rotation around Z:
+    half_angle = theta / 2.0
+    s = math.sin(half_angle)
+    c = math.cos(half_angle)
+
+    # For Boxes3D, we can pass a Nx4 array of (x, y, z, w):
+    rr.log(
+        "robot/base",
+        rr.Boxes3D(
+            centers=[[x, y, half_z]],
+            half_sizes=[[half_x, half_y, half_z]],
+            quaternions=[[0.0, 0.0, s, c]],  # Nx4 array
+            colors=[[128, 128, 128]],
+            labels=["robot body"],
+            fill_mode="solid",
+        ),
+    )
+
+    # Instead of RotationQuat, use a RotationAxisAngle for the camera transform:
+    camera_rotation = RotationAxisAngle(
+        axis=[0.0, 0.0, 1.0],
+        angle=Angle(rad=theta),
+    )
+    rr.log(
+        "robot/camera",
+        rr.Transform3D(
+            translation=[x, y, ROBOT_HEIGHT],
+            rotation=camera_rotation,
+        ),
+    )
+
+    # We can log a Pinhole for the camera using calibration from cam_calibration.json:
+    # Example values below; replace with your fx, fy, width, height, etc.
+    fx = 597.19
+    fy = 598.65
+    w = 1920
+    h = 1080
+    rr.log("robot/camera/pinhole", rr.Pinhole(focal_length=(fx, fy), principal_point=None, width=w, height=h))
+
+    # If you want to log incoming images here, see image_listener below
+    # for how it logs to "robot/camera/undistorted" or "robot/camera/rgb".
+
+    # Now define each wheel's local offset, then log a 3D arrow for its module angle:
+    def log_module_arrow_3d(offset_x, offset_y, module_angle, name):
+        # Module center in global, ignoring height offset for simplicity:
+        # The top level rotation is already applied to the robot base, so we
+        # can re-apply if you want to physically place them in world coords:
+        # A quick approach is to treat the modules as a separate object each with
+        # its own transform, but below we just do an Arrows3D in the global
+        # frame for clarity.
+
+        # transform local offset to global:
+        cosT = math.cos(theta)
+        sinT = math.sin(theta)
+        gx = x + (offset_x * cosT - offset_y * sinT)
+        gy = y + (offset_x * sinT + offset_y * cosT)
+        gz = 0.0  # assume on ground
+
+        # direction is robot heading + module angle:
+        total_angle = theta + module_angle
+        arrow_len = 0.05
+        vx = arrow_len * math.cos(total_angle)
+        vy = arrow_len * math.sin(total_angle)
+        vz = 0.0
+
+        rr.log(
+            f"robot/modules/{name}",
+            rr.Arrows3D(
+                origins=[[gx, gy, gz]],
+                vectors=[[vx, vy, vz]],
+                radii=0.003,
+                colors=[[0, 255, 0]],
+                labels=[name],
+            ),
+        )
+
+    fl_angle = latest_modules["front_left"]
+    fr_angle = latest_modules["front_right"]
+    bl_angle = latest_modules["back_left"]
+    br_angle = latest_modules["back_right"]
+
+    # front-left
+    log_module_arrow_3d( half_x,  half_y, fl_angle, "front_left_module")
+    # front-right
+    log_module_arrow_3d( half_x, -half_y, fr_angle, "front_right_module")
+    # back-left
+    log_module_arrow_3d(-half_x,  half_y, bl_angle, "back_left_module")
+    # back-right
+    log_module_arrow_3d(-half_x, -half_y, br_angle, "back_right_module")
+
 def image_listener(sample):
     """
     Decode image from raw bytes (ZBytes => bytes) and log to Rerun.
@@ -254,6 +361,7 @@ def image_listener(sample):
     received_img = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
     if received_img is not None:
         rr.log("robot/camera/undistorted", rr.Image(received_img))
+        rr.log("robot/camera/rgb", rr.Image(received_img))
 
 def poses_listener(sample):
     """
@@ -308,7 +416,16 @@ def main():
 
     clock = pygame.time.Clock()
     running = True
-    while running:
+    while True:
+        # DEBUG: print how many axes we have:
+        num_axes = joy.get_numaxes()
+        print("Number of axes detected:", num_axes)
+
+        # Print each axis raw value:
+        axes = [joy.get_axis(i) for i in range(num_axes)]
+        print("Raw axis values:", axes)
+
+        print("looping")
         pygame.event.pump()
 
         # If the CROSS button is pressed and we aren't already in autonomous, launch it
@@ -336,6 +453,8 @@ def main():
             print(cmd)
             vel_pub.put(cmd)
 
+        # Re-log the 3D visualization each loop:
+        update_rerun_viz_3d()
         clock.tick(50)  # 50 Hz
 
     session.close()
