@@ -7,8 +7,8 @@ import numpy as np
 def main():
     # ----- Parameters you will need to tweak -----
     # Checkerboard pattern: number of interior corners in each dimension
-    # E.g., a 9x6 board has 9 interior corners horizontally and 6 vertically
-    checkerboard_size = (11, 8)
+    # 11 by 8 checkerboard but it is interior corners so its 10 by 7
+    checkerboard_size = (10, 7)
 
     # Real-world dimensions of each checkerboard square (in meters, for instance)
     # If you only need relative scaling, the exact unit can be arbitrary,
