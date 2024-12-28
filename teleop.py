@@ -5,10 +5,10 @@ import pygame
 import math
 import threading
 import cv2
+import numpy as np
 
 # ---- NEW IMPORTS FOR RERUN:
 import rerun as rr
-import numpy as np
 from geometry2d import Transform2d, Vector2d
 from auton import autonomous_motion, RobotContext, autonomous_running
 from constants import (
@@ -254,8 +254,8 @@ def update_rerun_viz_3d():
     and 3D arrows for each swerve module’s orientation.
     """
     x = latest_odom["x"]
-    y = -latest_odom["y"]
-    theta = -latest_odom["theta"]  # in radians
+    y = latest_odom["y"]
+    theta = latest_odom["theta"] - np.pi / 2.0  # in radians
 
     # Robot center in global coordinates:
     # We'll model as a 3D box with half-sizes of (ROBOT_SIZE/2, ROBOT_SIZE/2, ROBOT_HEIGHT/2).
@@ -263,47 +263,69 @@ def update_rerun_viz_3d():
     half_y = ROBOT_SIZE / 2.0
     half_z = ROBOT_HEIGHT / 2.0
 
-    # Construct quaternion for a yaw rotation around Z:
+    # 1) Construct yaw-based quaternion around Z:
     half_angle = theta / 2.0
     s = math.sin(half_angle)
     c = math.cos(half_angle)
 
-    # For Boxes3D, we can pass a Nx4 array of (x, y, z, w):
+    # 2) Use partial alpha color for a translucent robot box, fill_mode="solid":
+    #    wireframe is not yet supported, so we'll do a partially transparent solid.
+    #    RGBA => [0, 255, 255, 128] means neon cyan + 50% alpha.
     rr.log(
         "robot/base",
         rr.Boxes3D(
             centers=[[x, y, half_z]],
             half_sizes=[[half_x, half_y, half_z]],
-            quaternions=[[0.0, 0.0, s, c]],  # Nx4 array
-            colors=[[128, 128, 128]],
-            labels=["robot body"],
+            quaternions=[[0.0, 0.0, s, c]],
+            colors=[[0, 255, 255, 128]],  # RGBA with partial alpha
             fill_mode="solid",
         ),
     )
 
-    # Instead of RotationQuat, use a RotationAxisAngle for the camera transform:
-    camera_rotation = RotationAxisAngle(
-        axis=[0.0, 0.0, 1.0],
-        angle=Angle(rad=theta),
-    )
+    # Build rotation matrices for yaw, pitch, roll:
+    pitch_deg = 0.0
+    pitch_rad = math.radians(pitch_deg)
+
+    pitch_mat = np.array([
+        [ math.cos(pitch_rad), 0.0, math.sin(pitch_rad)],
+        [ 0.0,                1.0,              0.0     ],
+        [-math.sin(pitch_rad), 0.0, math.cos(pitch_rad)],
+    ], dtype=float)
+
+    yaw_mat = np.array([
+        [ math.cos(theta), -math.sin(theta), 0.0],
+        [ math.sin(theta),  math.cos(theta), 0.0],
+        [ 0.0,             0.0,             1.0],
+    ], dtype=float)
+
+    # Add a roll of +90° around X
+    roll_deg = -90.0
+    roll_rad = math.radians(roll_deg)
+    roll_mat = np.array([
+        [1.0,         0.0,          0.0],
+        [0.0,  math.cos(roll_rad), -math.sin(roll_rad)],
+        [0.0,  math.sin(roll_rad),  math.cos(roll_rad)],
+    ], dtype=float)
+
+
+
+    # Compose them in an order, e.g. yaw -> pitch -> roll:
+    final_rot = yaw_mat @ pitch_mat @ roll_mat
+
+    axis, rot_angle = axis_angle_from_matrix(final_rot)
+
     rr.log(
         "robot/camera",
         rr.Transform3D(
             translation=[x, y, ROBOT_HEIGHT],
-            rotation=camera_rotation,
+            rotation=RotationAxisAngle(axis=axis, angle=Angle(rad=rot_angle)),
         ),
     )
 
-    # We can log a Pinhole for the camera using calibration from cam_calibration.json:
-    # Example values below; replace with your fx, fy, width, height, etc.
-    fx = 597.19
-    fy = 598.65
-    w = 1920
-    h = 1080
-    rr.log("robot/camera/pinhole", rr.Pinhole(focal_length=(fx, fy), principal_point=None, width=w, height=h))
-
-    # If you want to log incoming images here, see image_listener below
-    # for how it logs to "robot/camera/undistorted" or "robot/camera/rgb".
+    # Log the pinhole:
+    fx, fy = 597.19, 598.65
+    w, h   = 1920, 1080
+    rr.log("robot/camera", rr.Pinhole(focal_length=(fx, fy), width=w, height=h))
 
     # Now define each wheel's local offset, then log a 3D arrow for its module angle:
     def log_module_arrow_3d(offset_x, offset_y, module_angle, name):
@@ -335,7 +357,7 @@ def update_rerun_viz_3d():
                 vectors=[[vx, vy, vz]],
                 radii=0.003,
                 colors=[[0, 255, 0]],
-                labels=[name],
+                show_labels=[False],
             ),
         )
 
@@ -360,8 +382,8 @@ def image_listener(sample):
     np_data = np.frombuffer(sample.payload.to_bytes(), dtype=np.uint8)
     received_img = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
     if received_img is not None:
-        rr.log("robot/camera/undistorted", rr.Image(received_img))
-        rr.log("robot/camera/rgb", rr.Image(received_img))
+        # 5) Log directly on "robot/camera" so the pinhole & the image are in the same entity:
+        rr.log("robot/camera", rr.Image(received_img))
 
 def poses_listener(sample):
     """
@@ -372,6 +394,38 @@ def poses_listener(sample):
     print(f"Received {len(poses_data)} tag(s):")
     for pose_info in poses_data:
         print(f"  ID {pose_info['tag_id']} => SE3: {pose_info['SE3']}")
+
+def axis_angle_from_matrix(R: np.ndarray):
+    """
+    Extract (axis, angle) from a 3x3 rotation matrix R.
+    Returns:
+        axis (list of float) - e.g. [ax, ay, az]
+        angle (float)        - in radians
+    """
+    # Based on standard formula: angle = arccos( (trace(R) - 1) / 2 )
+    # Then axis is built from the off-diagonal terms.
+
+    eps = 1e-7
+    trace_val = R[0, 0] + R[1, 1] + R[2, 2]
+    # Clamp the trace to [-1, 3]
+    trace_val = max(-1.0, min(3.0, trace_val))
+
+    angle = math.acos(max(-1.0, min(1.0, (trace_val - 1.0) / 2.0)))
+    if abs(angle) < eps:
+        # No rotation
+        return [0.0, 0.0, 1.0], 0.0
+
+    # Axis:
+    rx = R[2, 1] - R[1, 2]
+    ry = R[0, 2] - R[2, 0]
+    rz = R[1, 0] - R[0, 1]
+    axis_len = math.sqrt(rx*rx + ry*ry + rz*rz)
+    if axis_len < eps:
+        # Fallback axis
+        return [0.0, 0.0, 1.0], angle
+
+    inv = 1.0 / axis_len
+    return [rx*inv, ry*inv, rz*inv], angle
 
 def main():
     # Initialize rerun
