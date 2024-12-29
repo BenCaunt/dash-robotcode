@@ -14,11 +14,11 @@ from auton import autonomous_motion, RobotContext, autonomous_running
 from constants import (
     VELOCITY_KEY, ZERO_HEADING_KEY, MEASURED_TWIST_KEY,
     ODOMETRY_KEY, WHEEL_VELOCITIES_KEY, MODULE_ANGLES_KEY,
-    LIDAR_SCAN_KEY, DASH_MOVEMENT_CONSTRAINT
+    LIDAR_SCAN_KEY, DASH_MOVEMENT_CONSTRAINT, TAG_SIZE
 )
 from rerun import RotationAxisAngle, Angle
 
-from utils import angle_wrap
+from utils import angle_wrap, axis_angle_from_matrix
 
 LEFT_X_AXIS = 0
 LEFT_Y_AXIS = 1
@@ -395,37 +395,55 @@ def poses_listener(sample):
     for pose_info in poses_data:
         print(f"  ID {pose_info['tag_id']} => SE3: {pose_info['SE3']}")
 
-def axis_angle_from_matrix(R: np.ndarray):
-    """
-    Extract (axis, angle) from a 3x3 rotation matrix R.
-    Returns:
-        axis (list of float) - e.g. [ax, ay, az]
-        angle (float)        - in radians
-    """
-    # Based on standard formula: angle = arccos( (trace(R) - 1) / 2 )
-    # Then axis is built from the off-diagonal terms.
 
-    eps = 1e-7
-    trace_val = R[0, 0] + R[1, 1] + R[2, 2]
-    # Clamp the trace to [-1, 3]
-    trace_val = max(-1.0, min(3.0, trace_val))
+        # 1) Build a 4x4 SE3 transform for the camera in global coords.
+        #    Assume camera yaw = robot's yaw, and z=0.254 m (~10 inches).
+        robot_theta = latest_odom["theta"]
+        cx = latest_odom["x"]
+        cy = latest_odom["y"]
+        cz = 0.254 # 10 inches
 
-    angle = math.acos(max(-1.0, min(1.0, (trace_val - 1.0) / 2.0)))
-    if abs(angle) < eps:
-        # No rotation
-        return [0.0, 0.0, 1.0], 0.0
+        CamGlobal = np.eye(4)
+        CamGlobal[0, 3] = cx
+        CamGlobal[1, 3] = cy
+        CamGlobal[2, 3] = cz
+        CamGlobal[0, 0] =  np.cos(robot_theta)
+        CamGlobal[0, 1] = -np.sin(robot_theta)
+        CamGlobal[1, 0] =  np.sin(robot_theta)
+        CamGlobal[1, 1] =  np.cos(robot_theta)
 
-    # Axis:
-    rx = R[2, 1] - R[1, 2]
-    ry = R[0, 2] - R[2, 0]
-    rz = R[1, 0] - R[0, 1]
-    axis_len = math.sqrt(rx*rx + ry*ry + rz*rz)
-    if axis_len < eps:
-        # Fallback axis
-        return [0.0, 0.0, 1.0], angle
+        # 2) Convert the tag's SE3 pose from JSON and reshape into a 4x4 np.array
+        tag_in_cam = np.array(pose_info["SE3"], dtype=float).reshape((4, 4))
 
-    inv = 1.0 / axis_len
-    return [rx*inv, ry*inv, rz*inv], angle
+        # 3) Compute the tag’s pose in the global frame: tag_global = CamGlobal @ tag_in_cam
+        tag_global = CamGlobal @ tag_in_cam
+
+        # 4) Extract translation & rotation
+        tx, ty, tz = tag_global[0, 3], tag_global[1, 3], tag_global[2, 3]
+        rotation_mat = tag_global[:3, :3]
+        axis, angle = axis_angle_from_matrix(rotation_mat)
+
+        # 5) Log a 3D box for the tag in Rerun
+        #    You can log a purely static box or chain a Transform3D:
+        half_sz = TAG_SIZE / 2.0  # half side length of the tag
+        rr.log(
+            f"robot/tag_{pose_info['tag_id']}",
+            rr.Transform3D(
+                translation=[tx, ty, tz],
+                rotation=RotationAxisAngle(axis=axis, angle=Angle(rad=angle)),
+            ),
+        )
+        rr.log(
+            f"robot/tag_{pose_info['tag_id']}/box",
+            rr.Boxes3D(
+                centers=[[0, 0, 0]],
+                half_sizes=[[half_sz, half_sz, 0.01]],  # small thickness
+                colors=[[255, 255, 0]],
+                fill_mode="solid",
+            ),
+        )
+        # --- NEW CODE END ---
+
 
 def main():
     # Initialize rerun
@@ -473,13 +491,10 @@ def main():
     while True:
         # DEBUG: print how many axes we have:
         num_axes = joy.get_numaxes()
-        print("Number of axes detected:", num_axes)
 
         # Print each axis raw value:
         axes = [joy.get_axis(i) for i in range(num_axes)]
-        print("Raw axis values:", axes)
 
-        print("looping")
         pygame.event.pump()
 
         # If the CROSS button is pressed and we aren't already in autonomous, launch it
@@ -504,7 +519,6 @@ def main():
             omega = -rx * max_omega_deg
 
             cmd = json.dumps({"vx": vx, "vy": vy, "omega": omega})
-            print(cmd)
             vel_pub.put(cmd)
 
         # Re-log the 3D visualization each loop:

@@ -5,6 +5,8 @@ import numpy as np
 import zenoh
 from zenoh import Config
 
+from constants import TAG_SIZE
+
 HEADLESS = True
 
 def main():
@@ -28,7 +30,7 @@ def main():
     if not cap.isOpened():
         print("Error: Could not open webcam.")
         return
-
+    
     # Compute undistortion and rectification maps (similar to undistort_example.py)
     new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
         camera_matrix, dist_coeffs, (image_width, image_height), 1, (image_width, image_height)
@@ -43,8 +45,7 @@ def main():
     cx = camera_matrix[0, 2]
     cy = camera_matrix[1, 2]
         
-    # Define the real-world size of your AprilTag (in meters)
-    tag_size = 0.1725 # 17.25 cm
+    
 
     # Set up AprilTag detector (without pose parameters)
     detector = Detector(
@@ -76,7 +77,7 @@ def main():
                 gray,
                 estimate_tag_pose=True,
                 camera_params=(fx, fy, cx, cy),
-                tag_size=tag_size
+                tag_size=TAG_SIZE
             )
 
             # Draw detections
@@ -130,9 +131,24 @@ def main():
             # Collect poses for any detected tags and publish as JSON
             tag_poses = []
             for detection in detections:
+                # Convert them to a 4x4 SE3 matrix
+                SE3 = np.eye(4)
+                SE3[:3, :3] = detection.pose_R
+                SE3[:3, 3] = detection.pose_t.flatten()
+                # converts from camera frame to robot frame
+                # effective map (x,y,z) -> (z,-x,y)
+                transformation = np.array([
+                    [0,0,1,0],
+                    [-1,0,0,0],
+                    [0,-1,0,0],
+                    [0,0,0,1]
+                ])
+                tag_SE3 = transformation @ SE3
+                print(f"Tag {detection.tag_id} Pose:\n{tag_SE3}")
+                
                 tag_poses.append({
                     "tag_id": detection.tag_id,
-                    "SE3": SE3.tolist()
+                    "SE3": tag_SE3.tolist()
                 })
             z_session.put('robot/camera/tag_poses', json.dumps(tag_poses))
 

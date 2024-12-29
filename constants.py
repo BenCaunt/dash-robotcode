@@ -26,5 +26,6 @@ WHEEL_VELOCITIES_KEY = "robot/observed/wheel_velocities"
 MODULE_ANGLES_KEY = "robot/observed/module_angles"
 LIDAR_SCAN_KEY = "lidar/scan"
 
-
+# Define the real-world size of your AprilTag (in meters)
+TAG_SIZE = 0.1725 # 17.25 cm
 
