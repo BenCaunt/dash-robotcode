@@ -60,6 +60,9 @@ def main():
                 print("Failed to grab frame")
                 break
 
+            # Print frame resolution
+            print(f"Frame resolution: {frame.shape[1]}x{frame.shape[0]}")
+
             # Undistort the frame
             undistorted = cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
 
