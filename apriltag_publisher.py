@@ -20,6 +20,11 @@ def main():
 
     # Initialize camera capture
     cap = cv2.VideoCapture(0)
+
+    # Attempt to set 1920x1080 resolution
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+
     if not cap.isOpened():
         print("Error: Could not open webcam.")
         return
@@ -59,9 +64,6 @@ def main():
             if not ret:
                 print("Failed to grab frame")
                 break
-
-            # Print frame resolution
-            print(f"Frame resolution: {frame.shape[1]}x{frame.shape[0]}")
 
             # Undistort the frame
             undistorted = cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
