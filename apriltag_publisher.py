@@ -135,8 +135,8 @@ def main():
                 SE3 = np.eye(4)
                 SE3[:3, :3] = detection.pose_R
                 SE3[:3, 3] = detection.pose_t.flatten()
-                # converts from camera frame to robot frame
-                # effective map (x,y,z) -> (z,-x,y)
+                
+                # map (x,y,z) -> (z,-x,y)
                 transformation = np.array([
                     [0,0,1,0],
                     [-1,0,0,0],
