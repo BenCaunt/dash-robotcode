@@ -5,6 +5,8 @@ import numpy as np
 import zenoh
 from zenoh import Config
 
+HEADLESS = True
+
 def main():
     # Load calibration data
     with open("camera_calibration/cam_calibration.json", "r") as f:
@@ -129,7 +131,8 @@ def main():
                 })
             z_session.put('robot/camera/tag_poses', json.dumps(tag_poses))
 
-            cv2.imshow("Undistorted + AprilTag Detection", undistorted)
+            if not HEADLESS:
+                cv2.imshow("Undistorted + AprilTag Detection", undistorted)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break

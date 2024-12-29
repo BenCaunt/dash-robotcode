@@ -325,7 +325,7 @@ def update_rerun_viz_3d():
     # Log the pinhole:
     fx, fy = 597.19, 598.65
     w, h   = 1920, 1080
-    rr.log("robot/camera", rr.Pinhole(focal_length=(fx, fy), width=w, height=h))
+    rr.log("robot/camera", rr.Pinhole(focal_length=(fx, fy), width=w, height=h,image_plane_distance=1.0))
 
     # Now define each wheel's local offset, then log a 3D arrow for its module angle:
     def log_module_arrow_3d(offset_x, offset_y, module_angle, name):
