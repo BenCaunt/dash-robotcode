@@ -13,6 +13,7 @@ from constants import (
 )
 
 HEADLESS = True
+TARGET_FPS = 30  # Setting fixed framerate
 
 def main():
     # Load calibration data
@@ -23,23 +24,23 @@ def main():
     dist_coeffs = np.array(calibration_data["dist_coeffs"])
     image_width = calibration_data["image_width"]
     image_height = calibration_data["image_height"]
-    
 
     # Initialize camera capture
     cap = cv2.VideoCapture(0)
 
-    # Attempt to set 1920x1080 resolution
+    # Set camera properties for consistent timing
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-
-    # Attempt to keep buffer size small (not always supported)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
+    
+    # Force MJPG format for higher FPS
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
 
     if not cap.isOpened():
         print("Error: Could not open webcam.")
         return
     
-    # Compute undistortion and rectification maps (similar to undistort_example.py)
+    # Compute undistortion and rectification maps
     new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
         camera_matrix, dist_coeffs, (image_width, image_height), 1, (image_width, image_height)
     )
@@ -52,10 +53,8 @@ def main():
     fy = camera_matrix[1, 1]
     cx = camera_matrix[0, 2]
     cy = camera_matrix[1, 2]
-        
-    
 
-    # Set up AprilTag detector (without pose parameters)
+    # Set up AprilTag detector
     detector = Detector(
         families="tag36h11",
         nthreads=4,
@@ -68,63 +67,56 @@ def main():
     # Initialize Zenoh session with config
     with zenoh.open(Config()) as z_session:
         print("Press 'q' to quit.")
+        
+        # For FPS calculation
+        frame_count = 0
+        fps_start_time = time.monotonic()
+        
         while True:
-            loop_start = time.perf_counter_ns()
+            frame_start_time = time.monotonic()
             
-            # Non-blocking grab attempt
-            capture_start = time.perf_counter_ns()
-            ret = cap.grab()
-            if ret:
-                success, frame = cap.retrieve()
-                if not success:
-                    print("Failed to retrieve frame")
-                    break
-            else:
-                # Skip this loop if buffer isn't ready
-                print("No frame available in buffer right now.")
-                continue
-            capture_time = (time.perf_counter_ns() - capture_start) / 1e6
+            # Capture frame
+            ret, frame = cap.read()
+            capture_timestamp = time.monotonic()
             
             if not ret:
                 print("Failed to grab frame")
                 break
 
             # Undistort and prepare frame for detection
-            preprocess_start = time.perf_counter_ns()
             undistorted = cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
             gray = cv2.cvtColor(undistorted, cv2.COLOR_BGR2GRAY)
-            preprocess_time = (time.perf_counter_ns() - preprocess_start) / 1e6
 
             # Detect AprilTags
-            detection_start = time.perf_counter_ns()
             detections = detector.detect(
                 gray,
                 estimate_tag_pose=True,
                 camera_params=(fx, fy, cx, cy),
                 tag_size=TAG_SIZE
             )
-            detection_time = (time.perf_counter_ns() - detection_start) / 1e6
 
-            # Draw detections
-            drawing_start = time.perf_counter_ns()
-            for detection in detections:
-                corners = detection.corners
-                for i in range(4):
-                    pt1 = (int(corners[i][0]), int(corners[i][1]))
-                    pt2 = (int(corners[(i + 1) % 4][0]), int(corners[(i + 1) % 4][1]))
-                    cv2.line(undistorted, pt1, pt2, (0, 255, 0), 2)
+            # Draw detections if not headless
+            if not HEADLESS:
+                for detection in detections:
+                    corners = detection.corners
+                    for i in range(4):
+                        pt1 = (int(corners[i][0]), int(corners[i][1]))
+                        pt2 = (int(corners[(i + 1) % 4][0]), int(corners[(i + 1) % 4][1]))
+                        cv2.line(undistorted, pt1, pt2, (0, 255, 0), 2)
 
-                cX, cY = int(detection.center[0]), int(detection.center[1])
-                cv2.circle(undistorted, (cX, cY), 5, (0, 0, 255), -1)
-                cv2.putText(undistorted, f"ID: {detection.tag_id}", (cX - 10, cY - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-            drawing_time = (time.perf_counter_ns() - drawing_start) / 1e6
+                    cX, cY = int(detection.center[0]), int(detection.center[1])
+                    cv2.circle(undistorted, (cX, cY), 5, (0, 0, 255), -1)
+                    cv2.putText(undistorted, f"ID: {detection.tag_id}", (cX - 10, cY - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
             # Publish to Zenoh
-            publish_start = time.perf_counter_ns()
             success, buffer = cv2.imencode('.jpg', undistorted)
             if success:
-                z_session.put(CAMERA_UNDISTORTED_KEY, buffer.tobytes())
+                image_msg = {
+                    "timestamp": capture_timestamp,
+                    "image_data": buffer.tobytes().hex()  # Convert bytes to hex string for JSON
+                }
+                z_session.put(CAMERA_UNDISTORTED_KEY, json.dumps(image_msg))
 
             tag_poses = []
             for detection in detections:
@@ -142,25 +134,34 @@ def main():
                 
                 tag_poses.append({
                     "tag_id": detection.tag_id,
-                    "SE3": tag_SE3.tolist()
+                    "SE3": tag_SE3.tolist(),
+                    "timestamp": capture_timestamp,
+                    "detection_info": {
+                        "decision_margin": detection.decision_margin,
+                        "hamming": detection.hamming,
+                        "center": detection.center.tolist(),
+                        "corners": detection.corners.tolist()
+                    }
                 })
-            z_session.put(CAMERA_TAG_POSES_KEY, json.dumps(tag_poses))
-            publish_time = (time.perf_counter_ns() - publish_start) / 1e6
+            
+            if tag_poses:  # Only publish if we have detections
+                z_session.put(CAMERA_TAG_POSES_KEY, json.dumps(tag_poses))
 
-            total_time = (time.perf_counter_ns() - loop_start) / 1e6
-            print(f"\nTiming (ms):")
-            print(f"Frame Capture: {capture_time:.1f}")
-            print(f"Preprocessing: {preprocess_time:.1f}")
-            print(f"Tag Detection: {detection_time:.1f}")
-            print(f"Drawing     : {drawing_time:.1f}")
-            print(f"Publishing  : {publish_time:.1f}")
-            print(f"Total Loop  : {total_time:.1f}")
+            # Calculate and maintain FPS
+            frame_count += 1
+            if frame_count % 30 == 0:  # Print FPS every 30 frames
+                current_time = time.monotonic()
+                fps = frame_count / (current_time - fps_start_time)
+                print(f"FPS: {fps:.1f}")
+                frame_count = 0
+                fps_start_time = current_time
 
-            if not HEADLESS:
-                cv2.imshow("Undistorted + AprilTag Detection", undistorted)
-
-            # if cv2.waitKey(1) & 0xFF == ord('q'):
-            #     break
+            # Maintain consistent frame rate
+            frame_end_time = time.monotonic()
+            frame_duration = frame_end_time - frame_start_time
+            sleep_time = max(0, (1.0 / TARGET_FPS) - frame_duration)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
     cap.release()
     cv2.destroyAllWindows()
