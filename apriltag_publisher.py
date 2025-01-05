@@ -32,6 +32,9 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
+    # Attempt to keep buffer size small (not always supported)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
     if not cap.isOpened():
         print("Error: Could not open webcam.")
         return
@@ -68,10 +71,19 @@ def main():
         while True:
             loop_start = time.perf_counter_ns()
             
-            # Capture frame
+            # Non-blocking grab attempt
             capture_start = time.perf_counter_ns()
-            ret, frame = cap.read()
-            capture_time = (time.perf_counter_ns() - capture_start) / 1e6  # Convert to ms
+            ret = cap.grab()
+            if ret:
+                success, frame = cap.retrieve()
+                if not success:
+                    print("Failed to retrieve frame")
+                    break
+            else:
+                # Skip this loop if buffer isn't ready
+                print("No frame available in buffer right now.")
+                continue
+            capture_time = (time.perf_counter_ns() - capture_start) / 1e6
             
             if not ret:
                 print("Failed to grab frame")
