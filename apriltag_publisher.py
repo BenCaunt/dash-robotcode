@@ -159,9 +159,6 @@ def main():
             # Maintain consistent frame rate
             frame_end_time = time.monotonic()
             frame_duration = frame_end_time - frame_start_time
-            sleep_time = max(0, (1.0 / TARGET_FPS) - frame_duration)
-            if sleep_time > 0:
-                time.sleep(sleep_time)
 
     cap.release()
     cv2.destroyAllWindows()
