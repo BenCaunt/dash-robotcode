@@ -5,7 +5,11 @@ import numpy as np
 import zenoh
 from zenoh import Config
 
-from constants import TAG_SIZE
+from constants import (
+    TAG_SIZE,
+    CAMERA_UNDISTORTED_KEY,
+    CAMERA_TAG_POSES_KEY
+)
 
 HEADLESS = True
 
@@ -126,7 +130,7 @@ def main():
             # Convert 'undistorted' image to bytes and publish
             success, buffer = cv2.imencode('.jpg', undistorted)
             if success:
-                z_session.put('robot/camera/undistorted', buffer.tobytes())
+                z_session.put(CAMERA_UNDISTORTED_KEY, buffer.tobytes())
 
             # Collect poses for any detected tags and publish as JSON
             tag_poses = []
@@ -150,7 +154,7 @@ def main():
                     "tag_id": detection.tag_id,
                     "SE3": tag_SE3.tolist()
                 })
-            z_session.put('robot/camera/tag_poses', json.dumps(tag_poses))
+            z_session.put(CAMERA_TAG_POSES_KEY, json.dumps(tag_poses))
 
             if not HEADLESS:
                 cv2.imshow("Undistorted + AprilTag Detection", undistorted)

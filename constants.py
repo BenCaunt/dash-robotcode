@@ -26,6 +26,10 @@ WHEEL_VELOCITIES_KEY = "robot/observed/wheel_velocities"
 MODULE_ANGLES_KEY = "robot/observed/module_angles"
 LIDAR_SCAN_KEY = "lidar/scan"
 
+# Camera-related Zenoh keys
+CAMERA_UNDISTORTED_KEY = "robot/camera/undistorted"
+CAMERA_TAG_POSES_KEY = "robot/camera/tag_poses"
+
 # Define the real-world size of your AprilTag (in meters)
 TAG_SIZE = 0.1725 # 17.25 cm
 

@@ -14,7 +14,8 @@ from auton import autonomous_motion, RobotContext, autonomous_running
 from constants import (
     VELOCITY_KEY, ZERO_HEADING_KEY, MEASURED_TWIST_KEY,
     ODOMETRY_KEY, WHEEL_VELOCITIES_KEY, MODULE_ANGLES_KEY,
-    LIDAR_SCAN_KEY, DASH_MOVEMENT_CONSTRAINT, TAG_SIZE
+    LIDAR_SCAN_KEY, DASH_MOVEMENT_CONSTRAINT, TAG_SIZE,
+    CAMERA_UNDISTORTED_KEY, CAMERA_TAG_POSES_KEY
 )
 from rerun import RotationAxisAngle, Angle
 
@@ -206,16 +207,6 @@ def update_rerun_viz():
         ),
     )
 
-    # Now, each module is at a corner location in the local frame (or offset).
-    # Let's assume swerve modules are at the same corners as the square above:
-    # front-left  => (half, half)
-    # front-right => (half, -half)
-    # back-left   => (-half, half)
-    # back-right  => (-half, -half)
-    # We'll draw an arrow from each module’s position outward in the direction (theta + module_angle).
-
-    # (In reality, you may have slightly different offsets for each module center.)
-    # For demo, we’ll show the module arrow with length = 0.05 m to see orientation clearly.
     module_arrow_len = 0.05
 
     def log_module_arrow(offset_x, offset_y, module_angle, name):
@@ -471,8 +462,8 @@ def main():
     _ = session.declare_subscriber(LIDAR_SCAN_KEY, lidar_callback)
 
     # --- NEW SUBSCRIBERS INTEGRATED FROM APRILTAG_SUBSCRIBER ---
-    session.declare_subscriber("robot/camera/undistorted", image_listener)
-    session.declare_subscriber("robot/camera/tag_poses", poses_listener)
+    session.declare_subscriber(CAMERA_UNDISTORTED_KEY, image_listener)
+    session.declare_subscriber(CAMERA_TAG_POSES_KEY, poses_listener)
     # -----------------------------------------------------------
 
     # Send zero velocity at start
