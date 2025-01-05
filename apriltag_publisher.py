@@ -85,7 +85,12 @@ def main():
 
             # Detect AprilTags
             detection_start = time.perf_counter_ns()
-            detections = []
+            detections = detector.detect(
+                gray,
+                estimate_tag_pose=True,
+                camera_params=(fx, fy, cx, cy),
+                tag_size=TAG_SIZE
+            )
             detection_time = (time.perf_counter_ns() - detection_start) / 1e6
 
             # Draw detections
@@ -142,8 +147,8 @@ def main():
             if not HEADLESS:
                 cv2.imshow("Undistorted + AprilTag Detection", undistorted)
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            # if cv2.waitKey(1) & 0xFF == ord('q'):
+            #     break
 
     cap.release()
     cv2.destroyAllWindows()
