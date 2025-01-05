@@ -2,7 +2,7 @@ import numpy as np
 import math
 import rerun as rr
 from rerun import RotationAxisAngle, Angle
-from constants import TAG_SIZE, DASH_MOVEMENT_CONSTRAINT, ROBOT_HEIGHT
+from constants import TAG_SIZE, DASH_MOVEMENT_CONSTRAINT, CAMERA_HEIGHT
 from utils import axis_angle_from_matrix
 
 class RobotVisualizer:
@@ -86,7 +86,7 @@ class RobotVisualizer:
         # Robot dimensions
         half_x = DASH_MOVEMENT_CONSTRAINT.robot_radius
         half_y = DASH_MOVEMENT_CONSTRAINT.robot_radius
-        half_z = ROBOT_HEIGHT / 2.0
+        half_z = CAMERA_HEIGHT / 2.0
 
         # Robot base transform
         half_angle = theta / 2.0
@@ -135,7 +135,7 @@ class RobotVisualizer:
         rr.log(
             "robot/camera",
             rr.Transform3D(
-                translation=[x, y, ROBOT_HEIGHT],
+                translation=[x, y, CAMERA_HEIGHT],
                 rotation=RotationAxisAngle(axis=axis, angle=Angle(rad=rot_angle)),
             ),
         )

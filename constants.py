@@ -3,7 +3,7 @@ from geometry2d import Twist2dVelocity
 
 inches_to_meters = 0.0254
 
-ROBOT_HEIGHT = 10.0 * inches_to_meters
+CAMERA_HEIGHT = 11.5 * inches_to_meters
 
 @dataclass
 class SE2Constraint:

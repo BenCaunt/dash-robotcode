@@ -15,13 +15,18 @@ class RobotClient:
         self.session = zenoh.open(zenoh.Config())
         
         # State storage
-        self.latest_odom = {"x": 0.0, "y": 0.0, "theta": 0.0}
+        self.latest_odom = {"x": 0.0, "y": 0.0, "theta": 0.0, "timestamp": 0.0}
         self.latest_modules = {
             "front_left": 0.0,
             "front_right": 0.0,
             "back_left": 0.0,
             "back_right": 0.0,
         }
+        
+        # Odometry history for synchronization
+        self.odom_history = []
+        self.MAX_HISTORY_SIZE = 100  # Keep last 100 odometry messages
+        self.MAX_TIME_DIFF = 0.1  # Maximum time difference for synchronization (100ms)
         
         # Store visualizer reference
         self.visualizer = visualizer
@@ -67,14 +72,32 @@ class RobotClient:
         """Handle odometry data"""
         try:
             data = json.loads(sample.payload.to_string())
-            self.latest_odom["x"] = data["x"]
-            self.latest_odom["y"] = data["y"]
-            self.latest_odom["theta"] = data["theta"]
+            self.latest_odom = data
+            
+            # Add to history and maintain max size
+            self.odom_history.append(data)
+            if len(self.odom_history) > self.MAX_HISTORY_SIZE:
+                self.odom_history.pop(0)
             
             if self.visualizer:
                 self.visualizer.update_3d(self.latest_odom, self.latest_modules)
         except Exception as e:
             print(f"Failed to parse odom: {e}")
+
+    def _find_closest_odom(self, timestamp):
+        """Find the odometry data closest to the given timestamp"""
+        if not self.odom_history:
+            return self.latest_odom
+        
+        # Find closest timestamp
+        closest = min(self.odom_history, 
+                     key=lambda x: abs(x["timestamp"] - timestamp))
+        
+        # Check if within acceptable time difference
+        if abs(closest["timestamp"] - timestamp) > self.MAX_TIME_DIFF:
+            print(f"Warning: Large time difference ({abs(closest['timestamp'] - timestamp):.3f}s) in odometry synchronization")
+        
+        return closest
 
     def _wheel_velocities_callback(self, sample):
         """Handle wheel velocities data"""
@@ -112,9 +135,6 @@ class RobotClient:
     def _image_callback(self, sample):
         """Handle camera image data"""
         try:
-            data = json.loads(sample.payload.to_string())
-            timestamp = data["timestamp"]
-            print(f"Received image at {timestamp}")
             np_data = np.frombuffer(sample.payload.to_bytes(), dtype=np.uint8)
             received_img = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
             if received_img is not None and self.visualizer:
@@ -131,6 +151,9 @@ class RobotClient:
                     timestamp = pose_info["timestamp"]
                     print(f"Received tag pose {pose_info['tag_id']} at {timestamp}")
                     tag_in_cam = np.array(pose_info["SE3"], dtype=float).reshape((4, 4))
-                    self.visualizer.log_apriltag(pose_info["tag_id"], tag_in_cam, self.latest_odom)
+                    
+                    # Find synchronized odometry data
+                    synced_odom = self._find_closest_odom(timestamp)
+                    self.visualizer.log_apriltag(pose_info["tag_id"], tag_in_cam, synced_odom)
         except Exception as e:
             print(f"Failed to process tag poses: {e}") 

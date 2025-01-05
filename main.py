@@ -256,7 +256,8 @@ async def main():
             odom_msg = json.dumps({
                 "x": pose.x,
                 "y": pose.y,
-                "theta": pose.theta
+                "theta": pose.theta,
+                "timestamp": time.monotonic()
             })
             odom_pub.put(odom_msg)
 
