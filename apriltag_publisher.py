@@ -85,12 +85,7 @@ def main():
 
             # Detect AprilTags
             detection_start = time.perf_counter_ns()
-            detections = detector.detect(
-                gray,
-                estimate_tag_pose=True,
-                camera_params=(fx, fy, cx, cy),
-                tag_size=TAG_SIZE
-            )
+            detections = []
             detection_time = (time.perf_counter_ns() - detection_start) / 1e6
 
             # Draw detections
