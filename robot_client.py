@@ -7,9 +7,10 @@ from constants import (
     ODOMETRY_KEY, WHEEL_VELOCITIES_KEY, MODULE_ANGLES_KEY,
     LIDAR_SCAN_KEY, CAMERA_UNDISTORTED_KEY, CAMERA_TAG_POSES_KEY
 )
+from visualization import RobotVisualizer
 
 class RobotClient:
-    def __init__(self, visualizer=None):
+    def __init__(self, visualizer: RobotVisualizer):
         # Initialize Zenoh session
         self.session = zenoh.open(zenoh.Config())
         
@@ -111,6 +112,9 @@ class RobotClient:
     def _image_callback(self, sample):
         """Handle camera image data"""
         try:
+            data = json.loads(sample.payload.to_string())
+            timestamp = data["timestamp"]
+            print(f"Received image at {timestamp}")
             np_data = np.frombuffer(sample.payload.to_bytes(), dtype=np.uint8)
             received_img = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
             if received_img is not None and self.visualizer:
@@ -124,6 +128,8 @@ class RobotClient:
             poses_data = json.loads(sample.payload.to_string())
             if self.visualizer:
                 for pose_info in poses_data:
+                    timestamp = pose_info["timestamp"]
+                    print(f"Received tag pose {pose_info['tag_id']} at {timestamp}")
                     tag_in_cam = np.array(pose_info["SE3"], dtype=float).reshape((4, 4))
                     self.visualizer.log_apriltag(pose_info["tag_id"], tag_in_cam, self.latest_odom)
         except Exception as e:

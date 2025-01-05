@@ -112,11 +112,7 @@ def main():
             # Publish to Zenoh
             success, buffer = cv2.imencode('.jpg', undistorted)
             if success:
-                image_msg = {
-                    "timestamp": capture_timestamp,
-                    "image_data": buffer.tobytes().hex()  # Convert bytes to hex string for JSON
-                }
-                z_session.put(CAMERA_UNDISTORTED_KEY, json.dumps(image_msg))
+                z_session.put(CAMERA_UNDISTORTED_KEY, buffer.tobytes().hex())
 
             tag_poses = []
             for detection in detections:
