@@ -4,6 +4,7 @@ import json
 import numpy as np
 import zenoh
 from zenoh import Config
+import time
 
 from constants import (
     TAG_SIZE,
@@ -65,82 +66,60 @@ def main():
     with zenoh.open(Config()) as z_session:
         print("Press 'q' to quit.")
         while True:
+            loop_start = time.perf_counter_ns()
+            
+            # Capture frame
+            capture_start = time.perf_counter_ns()
             ret, frame = cap.read()
+            capture_time = (time.perf_counter_ns() - capture_start) / 1e6  # Convert to ms
+            
             if not ret:
                 print("Failed to grab frame")
                 break
 
-            # Undistort the frame
+            # Undistort and prepare frame for detection
+            preprocess_start = time.perf_counter_ns()
             undistorted = cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
-
-            # Convert to grayscale for AprilTag detection
             gray = cv2.cvtColor(undistorted, cv2.COLOR_BGR2GRAY)
+            preprocess_time = (time.perf_counter_ns() - preprocess_start) / 1e6
 
             # Detect AprilTags
+            detection_start = time.perf_counter_ns()
             detections = detector.detect(
                 gray,
                 estimate_tag_pose=True,
                 camera_params=(fx, fy, cx, cy),
                 tag_size=TAG_SIZE
             )
+            detection_time = (time.perf_counter_ns() - detection_start) / 1e6
 
             # Draw detections
+            drawing_start = time.perf_counter_ns()
             for detection in detections:
-                # Extract corner points (each corner is (x, y))
                 corners = detection.corners
-                # Draw bounding box around each detected tag
                 for i in range(4):
                     pt1 = (int(corners[i][0]), int(corners[i][1]))
                     pt2 = (int(corners[(i + 1) % 4][0]), int(corners[(i + 1) % 4][1]))
                     cv2.line(undistorted, pt1, pt2, (0, 255, 0), 2)
 
-                # Tag ID center
                 cX, cY = int(detection.center[0]), int(detection.center[1])
                 cv2.circle(undistorted, (cX, cY), 5, (0, 0, 255), -1)
-
-                # Put the tag ID text near the center
                 cv2.putText(undistorted, f"ID: {detection.tag_id}", (cX - 10, cY - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+            drawing_time = (time.perf_counter_ns() - drawing_start) / 1e6
 
-                # Retrieve the rotation and translation vectors
-                pose_R = detection.pose_R
-                pose_t = detection.pose_t
-
-                # Convert them to a 4x4 SE3 matrix
-                SE3 = np.eye(4)
-                SE3[:3, :3] = pose_R
-                SE3[:3, 3] = pose_t.flatten()
-                # converts from camera frame to robot frame
-                # effective map (x,y,z) -> (z,-x,y)
-                transformation = np.array([
-                    [0,0,1,0],
-                    [-1,0,0,0],
-                    [0,-1,0,0],
-                    [0,0,0,1]
-                ])
-                SE3 = transformation @ SE3
-                print(f"Tag {detection.tag_id}Pose:\n{SE3}")
-                # output: 
-                # Tag 0Pose:
-                # [[ 0.91781674 -0.3144454  -0.24235618  0.12949656]
-                # [ 0.39557001  0.67248115  0.62553455  0.43877952]
-                # [-0.0337165  -0.66999492  0.74159962  0.80210098]
-                # [ 0.          0.          0.          1.        ]]
-
-            # Convert 'undistorted' image to bytes and publish
+            # Publish to Zenoh
+            publish_start = time.perf_counter_ns()
             success, buffer = cv2.imencode('.jpg', undistorted)
             if success:
                 z_session.put(CAMERA_UNDISTORTED_KEY, buffer.tobytes())
 
-            # Collect poses for any detected tags and publish as JSON
             tag_poses = []
             for detection in detections:
-                # Convert them to a 4x4 SE3 matrix
                 SE3 = np.eye(4)
                 SE3[:3, :3] = detection.pose_R
                 SE3[:3, 3] = detection.pose_t.flatten()
                 
-                # map (x,y,z) -> (z,-x,y)
                 transformation = np.array([
                     [0,0,1,0],
                     [-1,0,0,0],
@@ -148,13 +127,22 @@ def main():
                     [0,0,0,1]
                 ])
                 tag_SE3 = transformation @ SE3
-                print(f"Tag {detection.tag_id} Pose:\n{tag_SE3}")
                 
                 tag_poses.append({
                     "tag_id": detection.tag_id,
                     "SE3": tag_SE3.tolist()
                 })
             z_session.put(CAMERA_TAG_POSES_KEY, json.dumps(tag_poses))
+            publish_time = (time.perf_counter_ns() - publish_start) / 1e6
+
+            total_time = (time.perf_counter_ns() - loop_start) / 1e6
+            print(f"\nTiming (ms):")
+            print(f"Frame Capture: {capture_time:.1f}")
+            print(f"Preprocessing: {preprocess_time:.1f}")
+            print(f"Tag Detection: {detection_time:.1f}")
+            print(f"Drawing     : {drawing_time:.1f}")
+            print(f"Publishing  : {publish_time:.1f}")
+            print(f"Total Loop  : {total_time:.1f}")
 
             if not HEADLESS:
                 cv2.imshow("Undistorted + AprilTag Detection", undistorted)
