@@ -2,10 +2,12 @@ import json
 import cv2
 import numpy as np
 import zenoh
+from pupil_apriltags import Detector
 from constants import (
     VELOCITY_KEY, ZERO_HEADING_KEY, MEASURED_TWIST_KEY,
     ODOMETRY_KEY, WHEEL_VELOCITIES_KEY, MODULE_ANGLES_KEY,
-    LIDAR_SCAN_KEY, CAMERA_UNDISTORTED_KEY, CAMERA_TAG_POSES_KEY
+    LIDAR_SCAN_KEY, CAMERA_UNDISTORTED_KEY, CAMERA_TAG_POSES_KEY,
+    TAG_SIZE
 )
 
 class RobotClient:
@@ -25,9 +27,29 @@ class RobotClient:
         # Store visualizer reference
         self.visualizer = visualizer
         
+        # Load camera calibration for AprilTag detection
+        with open("camera_calibration/cam_calibration.json", "r") as f:
+            calibration_data = json.load(f)
+        camera_matrix = np.array(calibration_data["camera_matrix"])
+        self.fx = camera_matrix[0, 0]
+        self.fy = camera_matrix[1, 1]
+        self.cx = camera_matrix[0, 2]
+        self.cy = camera_matrix[1, 2]
+
+        # Initialize AprilTag detector
+        self.detector = Detector(
+            families="tag36h11",
+            nthreads=4,
+            quad_decimate=1.0,
+            quad_sigma=0.0,
+            refine_edges=True,
+            decode_sharpening=0.25,
+        )
+        
         # Publishers
         self.vel_pub = self.session.declare_publisher(VELOCITY_KEY)
         self.zero_pub = self.session.declare_publisher(ZERO_HEADING_KEY)
+        self.tag_poses_pub = self.session.declare_publisher(CAMERA_TAG_POSES_KEY)
         
         # Subscribers
         self._setup_subscribers()
@@ -109,12 +131,73 @@ class RobotClient:
             print(f"Failed to parse lidar scan: {e}")
 
     def _image_callback(self, sample):
-        """Handle camera image data"""
+        """Handle camera image data and perform AprilTag detection"""
         try:
+            # Decode image
             np_data = np.frombuffer(sample.payload.to_bytes(), dtype=np.uint8)
             received_img = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-            if received_img is not None and self.visualizer:
-                self.visualizer.log_image(received_img)
+            if received_img is None:
+                return
+
+            # Start timing
+            detection_start = time.perf_counter_ns()
+
+            # Convert to grayscale for AprilTag detection
+            gray = cv2.cvtColor(received_img, cv2.COLOR_BGR2GRAY)
+
+            # Detect AprilTags
+            detections = self.detector.detect(
+                gray,
+                estimate_tag_pose=True,
+                camera_params=(self.fx, self.fy, self.cx, self.cy),
+                tag_size=TAG_SIZE
+            )
+
+            detection_time = (time.perf_counter_ns() - detection_start) / 1e6
+            
+            # Draw detections if visualizer is present
+            if self.visualizer:
+                img_with_detections = received_img.copy()
+                for detection in detections:
+                    corners = detection.corners
+                    for i in range(4):
+                        pt1 = (int(corners[i][0]), int(corners[i][1]))
+                        pt2 = (int(corners[(i + 1) % 4][0]), int(corners[(i + 1) % 4][1]))
+                        cv2.line(img_with_detections, pt1, pt2, (0, 255, 0), 2)
+
+                    cX, cY = int(detection.center[0]), int(detection.center[1])
+                    cv2.circle(img_with_detections, (cX, cY), 5, (0, 0, 255), -1)
+                    cv2.putText(img_with_detections, f"ID: {detection.tag_id}", (cX - 10, cY - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                self.visualizer.log_image(img_with_detections)
+
+            # Process and publish tag poses
+            tag_poses = []
+            for detection in detections:
+                SE3 = np.eye(4)
+                SE3[:3, :3] = detection.pose_R
+                SE3[:3, 3] = detection.pose_t.flatten()
+                
+                # map (x,y,z) -> (z,-x,y)
+                transformation = np.array([
+                    [0,0,1,0],
+                    [-1,0,0,0],
+                    [0,-1,0,0],
+                    [0,0,0,1]
+                ])
+                tag_SE3 = transformation @ SE3
+                
+                tag_poses.append({
+                    "tag_id": detection.tag_id,
+                    "SE3": tag_SE3.tolist()
+                })
+
+            # Publish tag poses
+            self.tag_poses_pub.put(json.dumps(tag_poses))
+
+            # Print timing info
+            print(f"AprilTag Detection Time: {detection_time:.1f} ms")
+
         except Exception as e:
             print(f"Failed to process image: {e}")
 
