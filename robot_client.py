@@ -38,6 +38,8 @@ class RobotClient:
         # Subscribers
         self._setup_subscribers()
 
+        self.autonomous_running = False
+
     def _setup_subscribers(self):
         """Setup all the zenoh subscribers"""
         self.session.declare_subscriber(MEASURED_TWIST_KEY, self._measured_twist_callback)

@@ -1,7 +1,7 @@
 import time
 import threading
 from constants import DASH_MOVEMENT_CONSTRAINT
-from auton import autonomous_motion, RobotContext, autonomous_running
+from auton import autonomous_motion, RobotContext
 from visualization import RobotVisualizer
 from robot_client import RobotClient
 from gamepad import GamepadController
@@ -22,14 +22,6 @@ def main():
     max_speed = DASH_MOVEMENT_CONSTRAINT.max_velocity.vx
     max_omega_deg = DASH_MOVEMENT_CONSTRAINT.max_velocity.w
 
-    # Create a context object for the external autonomous plugin to access
-    robot_ctx = RobotContext(
-        vel_pub=robot.vel_pub,
-        latest_odom=robot.latest_odom,
-        max_speed=max_speed,
-        max_omega_deg=max_omega_deg
-    )
-
     # Send zero velocity at start
     robot.send_velocity(0.0, 0.0, 0.0)
 
@@ -40,8 +32,8 @@ def main():
             axes = gamepad.get_raw_axes()
 
             # If the CROSS button is pressed and we aren't already in autonomous, launch it
-            if gamepad.is_cross_pressed() and not autonomous_running:
-                threading.Thread(target=autonomous_motion, args=(robot_ctx,), daemon=True).start()
+            if gamepad.is_cross_pressed() and not robot.autonomous_running:
+                threading.Thread(target=autonomous_motion, args=(robot,), daemon=True).start()
 
             if gamepad.is_circle_pressed():
                 robot.zero_heading()
@@ -50,7 +42,7 @@ def main():
             vx, vy, omega = gamepad.get_movement_command(max_speed, max_omega_deg)
 
             # If autonomous is running but joystick is at (0,0,0), skip sending gamepad commands
-            if not autonomous_running or (vx != 0.0 or vy != 0.0 or omega != 0.0):
+            if not robot.autonomous_running or (vx != 0.0 or vy != 0.0 or omega != 0.0):
                 robot.send_velocity(vx, vy, omega)
 
             clock.tick(50)  # 50 Hz

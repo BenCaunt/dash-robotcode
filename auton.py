@@ -2,9 +2,9 @@ import time
 import json
 import numpy as np
 import threading
+import constants
+from robot_client import RobotClient
 from utils import angle_wrap
-
-autonomous_running = False
 
 class RobotContext:
     """
@@ -15,14 +15,14 @@ class RobotContext:
         self.latest_odom = latest_odom
         self.max_speed = max_speed
         self.max_omega_deg = max_omega_deg
+        self.autonomous_running = False
 
-def autonomous_motion(context: RobotContext):
+def autonomous_motion(robot: RobotClient):
     """
     Example routine that drives the robot toward (0,0,0).
     Illustrates an external 'plugin' routine that can access the context.
     """
-    global autonomous_running
-    autonomous_running = True
+    robot.autonomous_running = True
     print("Starting autonomous motion...")
 
     # Similar logic as before, but referencing context attributes
@@ -32,14 +32,14 @@ def autonomous_motion(context: RobotContext):
     time_since_done = 0.0
 
     while not is_done and time_since_done < 0.5:
-        dx = 0.0 - context.latest_odom["x"]
-        dy = 0.0 - context.latest_odom["y"]
-        theta = angle_wrap(0.0 - context.latest_odom["theta"])
+        dx = 0.0 - robot.latest_odom["x"]
+        dy = 0.0 - robot.latest_odom["y"]
+        theta = angle_wrap(0.0 - robot.latest_odom["theta"])
 
-        vx = np.clip(dx * trans_gain, -context.max_speed, context.max_speed)
-        vy = np.clip(dy * trans_gain, -context.max_speed, context.max_speed)
-        omega = np.clip(theta * omega_gain, -context.max_omega_deg, context.max_omega_deg)
-        context.vel_pub.put(json.dumps({"vx": vx, "vy": vy, "omega": omega}))
+        vx = np.clip(dx * trans_gain, -constants.DASH_MOVEMENT_CONSTRAINT.max_velocity.vx, constants.DASH_MOVEMENT_CONSTRAINT.max_velocity.vx)
+        vy = np.clip(dy * trans_gain, -constants.DASH_MOVEMENT_CONSTRAINT.max_velocity.vy, constants.DASH_MOVEMENT_CONSTRAINT.max_velocity.vy)
+        omega = np.clip(theta * omega_gain, -constants.DASH_MOVEMENT_CONSTRAINT.max_velocity.w, constants.DASH_MOVEMENT_CONSTRAINT.max_velocity.w)
+        robot.vel_pub.put(json.dumps({"vx": vx, "vy": vy, "omega": omega}))
         time.sleep(0.05)
 
         # Update 'is_done' logic
@@ -51,6 +51,6 @@ def autonomous_motion(context: RobotContext):
         is_done = (time_since_done >= 0.5)
 
     # Stop the robot
-    context.vel_pub.put(json.dumps({"vx": 0.0, "vy": 0.0, "omega": 0.0}))
-    autonomous_running = False
+    robot.vel_pub.put(json.dumps({"vx": 0.0, "vy": 0.0, "omega": 0.0}))
+    robot.autonomous_running = False
     print("Autonomous motion complete.")

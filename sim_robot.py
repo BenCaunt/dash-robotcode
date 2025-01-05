@@ -90,7 +90,8 @@ async def simulation_loop(robot: SimRobot, dt=0.05):
         odom_msg = json.dumps({
             "x": sim_pose.x,
             "y": sim_pose.y,
-            "theta": sim_pose.theta
+            "theta": sim_pose.theta,
+            "timestamp": time.monotonic()
         })
         odom_pub.put(odom_msg)
 
@@ -123,7 +124,7 @@ async def simulation_loop(robot: SimRobot, dt=0.05):
         measured_twist_msg = json.dumps({
             "vx": current_twist.vx,
             "vy": current_twist.vy,
-            "omega": current_twist.w
+            "omega": current_twist.w,
         })
         measured_twist_pub.put(measured_twist_msg)
 
