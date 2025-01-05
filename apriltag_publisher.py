@@ -133,6 +133,16 @@ def main():
                     "SE3": tag_SE3.tolist()
                 })
             z_session.put(CAMERA_TAG_POSES_KEY, json.dumps(tag_poses))
+            publish_time = (time.perf_counter_ns() - publish_start) / 1e6
+
+            total_time = (time.perf_counter_ns() - loop_start) / 1e6
+            print(f"\nTiming (ms):")
+            print(f"Frame Capture: {capture_time:.1f}")
+            print(f"Preprocessing: {preprocess_time:.1f}")
+            print(f"Tag Detection: {detection_time:.1f}")
+            print(f"Drawing     : {drawing_time:.1f}")
+            print(f"Publishing  : {publish_time:.1f}")
+            print(f"Total Loop  : {total_time:.1f}")
 
             if not HEADLESS:
                 cv2.imshow("Undistorted + AprilTag Detection", undistorted)
